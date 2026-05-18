@@ -1,7 +1,3 @@
-<div align="center">
-<img width="1200" height="475" alt="VisSched banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # VisSched
 
 A free, account-free **visual schedule and class timer** for K–12 classrooms, special education, therapy sessions, and home routines.
