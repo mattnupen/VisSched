@@ -1238,11 +1238,11 @@
     const EMOJI_OPTIONS = ["👋","📖","📝","🔢","🎨","🎵","💻","🔬","🏃","🍱","🧘","🗣️","🧠","🧹","🎒","🏠","❓","🎉","⭐","⏰"];
 
     const INITIAL_BLOCKS = [
-      { id: '1', title: 'Morning Meeting', durationMinutes: 5, icon: '👋', description: '' },
-      { id: '2', title: 'Lesson Intro', durationMinutes: 10, icon: '🗣️', description: '' },
-      { id: '3', title: 'Work Time', durationMinutes: 20, icon: '📝', description: 'Complete worksheet pg. 12\nCheck with partner\nTurn in to basket' },
-      { id: '4', title: 'Lesson Recap', durationMinutes: 5, icon: '🧠', description: '' },
-      { id: '5', title: 'Packup', durationMinutes: 5, icon: '🎒', description: '' },
+      { id: '1', title: 'Settle in', durationMinutes: 2,  icon: '☕', description: '' },
+      { id: '2', title: 'Focus',     durationMinutes: 25, icon: '🎯', description: '' },
+      { id: '3', title: 'Break',     durationMinutes: 5,  icon: '🌿', description: '' },
+      { id: '4', title: 'Focus',     durationMinutes: 25, icon: '🎯', description: '' },
+      { id: '5', title: 'Wrap up',   durationMinutes: 3,  icon: '✅', description: '' },
     ];
 
     const STORAGE_KEYS = {
@@ -1307,7 +1307,7 @@
     ];
 
     const THEME_META = [
-      { id: 'light',         label: 'Light',         desc: 'Default — bright, classroom-friendly' },
+      { id: 'light',         label: 'Light',         desc: 'Default — bright, easy on the eyes' },
       { id: 'dark',          label: 'Dark',          desc: 'Low-light, calmer' },
       { id: 'warm',          label: 'Warm',          desc: 'Soft yellow, cozy' },
       { id: 'cool',          label: 'Cool',          desc: 'Calming blue' },
@@ -1565,8 +1565,8 @@
       osc.stop(now + dur + 0.05);
     }
 
-    // Threshold-specific chime. 10s gets a two-tone "ding-dong" so students learn
-    // the urgency without anything being harsh.
+    // Threshold-specific chime. 10s gets a two-tone "ding-dong" alert
+    // to signal that the block is about to end.
     function playWarningChime(thresholdSec) {
       switch (thresholdSec) {
         case 120: playChime(523, 400); break; // C5
