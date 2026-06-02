@@ -399,6 +399,21 @@
     }
     .modal-primary-btn:hover { background: #1e293b; }
 
+    /* ===== SAMPLE PICKER DIALOG ===== */
+    .sample-picker-dialog { padding: 0; border: 0; border-radius: 12px; max-width: 420px; width: calc(100vw - 32px); box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+    .sample-picker-dialog::backdrop { background: rgba(15, 23, 42, 0.4); }
+    .sample-picker-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    .sample-picker-header h2 { margin: 0; font-size: 18px; font-family: inherit; }
+    .sample-picker-header button { background: transparent; border: 0; font-size: 18px; cursor: pointer; padding: 4px 8px; color: #64748b; }
+    .sample-picker-list { display: grid; gap: 8px; padding: 12px; max-height: 60vh; overflow: auto; }
+    .sample-item { display: block; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; cursor: pointer; font-family: inherit; }
+    .sample-item:hover { background: #f8fafc; }
+    .sample-name { font-weight: 600; color: #0f172a; font-size: 16px; }
+    .sample-summary { font-size: 13px; color: #64748b; margin-top: 2px; }
+    .sample-picker-footer { padding: 12px 16px; border-top: 1px solid #f1f5f9; text-align: right; }
+    .sample-picker-footer button { background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .sample-picker-footer button:hover { background: #f8fafc; }
+
     /* ===== TIMER DISPLAY ===== */
     .timer-container {
       display: flex; flex-direction: column; overflow: hidden;
@@ -1194,6 +1209,17 @@
 <body>
   <div id="root"></div>
 
+  <dialog id="sample-picker-dialog" class="sample-picker-dialog">
+    <div class="sample-picker-header">
+      <h2>Start from a sample</h2>
+      <button type="button" onclick="document.getElementById('sample-picker-dialog').close()">✕</button>
+    </div>
+    <div class="sample-picker-list" id="sample-list"></div>
+    <div class="sample-picker-footer">
+      <button type="button" onclick="document.getElementById('sample-picker-dialog').close(); startBlankSchedule();">Start blank</button>
+    </div>
+  </dialog>
+
   <script>
     // ===== SVG ICONS =====
     const ICONS = {
@@ -1243,6 +1269,70 @@
       { id: '3', title: 'Break',     durationMinutes: 5,  icon: '🌿', description: '' },
       { id: '4', title: 'Focus',     durationMinutes: 25, icon: '🎯', description: '' },
       { id: '5', title: 'Wrap up',   durationMinutes: 3,  icon: '✅', description: '' },
+    ];
+
+    const SAMPLE_SCHEDULES = [
+      {
+        name: 'Pomodoro Focus',
+        blocks: [
+          { id: 'pf-1', title: 'Settle in',  durationMinutes: 2,  icon: '☕' },
+          { id: 'pf-2', title: 'Focus',      durationMinutes: 25, icon: '🎯' },
+          { id: 'pf-3', title: 'Break',      durationMinutes: 5,  icon: '🌿' },
+          { id: 'pf-4', title: 'Focus',      durationMinutes: 25, icon: '🎯' },
+          { id: 'pf-5', title: 'Break',      durationMinutes: 5,  icon: '🌿' },
+          { id: 'pf-6', title: 'Focus',      durationMinutes: 25, icon: '🎯' },
+          { id: 'pf-7', title: 'Long break', durationMinutes: 15, icon: '🍵' },
+        ],
+      },
+      {
+        name: 'Morning Routine',
+        blocks: [
+          { id: 'mr-1', title: 'Wake up',      durationMinutes: 5,  icon: '🌅' },
+          { id: 'mr-2', title: 'Stretch',      durationMinutes: 10, icon: '🧘' },
+          { id: 'mr-3', title: 'Shower',       durationMinutes: 10, icon: '🚿' },
+          { id: 'mr-4', title: 'Breakfast',    durationMinutes: 15, icon: '🥣' },
+          { id: 'mr-5', title: 'Get ready',    durationMinutes: 10, icon: '👕' },
+          { id: 'mr-6', title: 'Out the door', durationMinutes: 5,  icon: '🎒' },
+        ],
+      },
+      {
+        name: 'Workout Block',
+        blocks: [
+          { id: 'wo-1', title: 'Warm-up',             durationMinutes: 5,  icon: '🏃' },
+          { id: 'wo-2', title: 'Strength',            durationMinutes: 20, icon: '💪' },
+          { id: 'wo-3', title: 'HIIT',                durationMinutes: 15, icon: '🔥' },
+          { id: 'wo-4', title: 'Stretch & cool down', durationMinutes: 10, icon: '🧘' },
+        ],
+      },
+      {
+        name: 'Evening Wind-Down',
+        blocks: [
+          { id: 'ew-1', title: 'Tidy up',     durationMinutes: 10, icon: '🧹' },
+          { id: 'ew-2', title: 'Dinner',      durationMinutes: 30, icon: '🍽' },
+          { id: 'ew-3', title: 'Screens off', durationMinutes: 10, icon: '📵' },
+          { id: 'ew-4', title: 'Read',        durationMinutes: 20, icon: '📖' },
+          { id: 'ew-5', title: 'Lights out',  durationMinutes: 5,  icon: '🌙' },
+        ],
+      },
+      {
+        name: 'Study Session',
+        blocks: [
+          { id: 'ss-1', title: 'Review last session', durationMinutes: 10, icon: '📚' },
+          { id: 'ss-2', title: 'Deep read',           durationMinutes: 30, icon: '📖' },
+          { id: 'ss-3', title: 'Practice problems',   durationMinutes: 20, icon: '✏️' },
+          { id: 'ss-4', title: 'Recap & flashcards',  durationMinutes: 10, icon: '🃏' },
+        ],
+      },
+      {
+        name: 'Classroom Lesson Block',
+        blocks: [
+          { id: 'cl-1', title: 'Morning Meeting', durationMinutes: 5,  icon: '👋' },
+          { id: 'cl-2', title: 'Lesson Intro',    durationMinutes: 10, icon: '🗣️' },
+          { id: 'cl-3', title: 'Work Time',       durationMinutes: 20, icon: '📝' },
+          { id: 'cl-4', title: 'Recap',           durationMinutes: 5,  icon: '🧠' },
+          { id: 'cl-5', title: 'Packup',          durationMinutes: 5,  icon: '🎒' },
+        ],
+      },
     ];
 
     const STORAGE_KEYS = {
@@ -1915,7 +2005,7 @@
             `).join('')}
           </div>
           <div style="border-top:1px solid #f1f5f9;margin-top:0.25rem;padding-top:0.25rem;padding:0.25rem 0.5rem">
-            <button class="new-schedule-btn" onclick="createSchedule()">
+            <button class="new-schedule-btn" onclick="openNewScheduleDialog()">
               ${iconHTML('plus', 'icon-sm')} New Schedule
             </button>
           </div>
@@ -2070,6 +2160,47 @@
       state.sessionSettings = {};
       saveSchedules();
       render();
+    }
+
+    function createScheduleFromSample(sampleIndex) {
+      const sample = SAMPLE_SCHEDULES[sampleIndex];
+      if (!sample) return;
+      const blocks = sample.blocks.map(b => ({ ...b, description: b.description || '' }));
+      const newId = uuid();
+      state.schedules.push({
+        id: newId,
+        name: sample.name,
+        blocks,
+        greeting: '',
+        lastModified: Date.now(),
+        settings: snapshotGlobalScheduleSettings(),
+      });
+      state.currentScheduleId = newId;
+      state.isScheduleDropdownOpen = false;
+      state.sessionSettings = {};
+      saveSchedules();
+      render();
+    }
+
+    function startBlankSchedule() {
+      createSchedule();
+    }
+
+    function renderSampleList() {
+      const list = document.getElementById('sample-list');
+      if (!list) return;
+      list.innerHTML = SAMPLE_SCHEDULES.map((s, i) => {
+        const totalMin = s.blocks.reduce((a, b) => a + b.durationMinutes, 0);
+        return `<button type="button" class="sample-item" onclick="document.getElementById('sample-picker-dialog').close(); createScheduleFromSample(${i});">
+          <div class="sample-name">${escHTML(s.name)}</div>
+          <div class="sample-summary">${s.blocks.length} blocks · ${totalMin} min</div>
+        </button>`;
+      }).join('');
+    }
+
+    function openNewScheduleDialog() {
+      renderSampleList();
+      document.getElementById('sample-picker-dialog').showModal();
     }
 
     function deleteSchedule(id) {
