@@ -11,6 +11,14 @@
   <link rel="apple-touch-icon" sizes="180x180" href="Icons/icon-stackedcheck/vissched-180.png" />
   <link rel="shortcut icon" href="Icons/icon-stackedcheck/favicon.ico" />
   <style>
+    /* ===== SAFE-AREA INSETS (iOS notch / home-bar support) ===== */
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+    }
+
     /* ===== RESET & BASE ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -25,6 +33,10 @@
       background: #f0f9ff;
       color: #0f172a;
       position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+      padding-left: var(--safe-left);
+      padding-right: var(--safe-right);
     }
     @supports (height: 100dvh) { body { height: 100dvh; } }
     ::selection { background: #c7d2fe; }
@@ -354,6 +366,7 @@
       background: #fff; border-top: 1px solid #e2e8f0;
       padding: 0.75rem 0.75rem 1.25rem; box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.1);
       z-index: 10; flex-shrink: 0;
+      padding-bottom: max(1.25rem, var(--safe-bottom));
     }
     @media (min-width: 640px) { .bottom-bar { padding: 1.5rem; } }
     .bottom-bar-inner {
@@ -470,6 +483,7 @@
     .greeting-banner {
       width: 100%; text-align: center; padding: 1rem; border-bottom: 1px solid var(--border);
       background: var(--block-bg); flex-shrink: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      padding-top: max(1rem, var(--safe-top));
     }
     .greeting-text {
       font-weight: 800; color: var(--text); font-size: var(--fs-greeting, 36px);
@@ -1363,6 +1377,71 @@
       viewMode: 'schedule',
       audioEnabled: false, // Optional gentle chimes at transition warnings
     };
+
+    // ============================================================================
+    // iOS / Capacitor bridge
+    // All native calls go through window.Capacitor, which exists only when running
+    // inside the iOS app. On the web, every helper here is a no-op.
+    // ============================================================================
+    const isNativeIOS = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const nativePlugin = (name) => (isNativeIOS() && window.Capacitor.Plugins && window.Capacitor.Plugins[name]) || null;
+
+    // Register the Universal Link handler once Capacitor is ready.
+    // Fires when iOS hands us a URL like vissched.com/?s=<base64>
+    document.addEventListener('DOMContentLoaded', () => {
+      const App = nativePlugin('App');
+      if (!App) return;
+      App.addListener('appUrlOpen', (event) => {
+        try {
+          const u = new URL(event.url);
+          const s = u.searchParams.get('s');
+          if (s) handleUrlImport(s);
+        } catch (err) {
+          console.warn('Universal Link parse failed', err);
+        }
+      });
+    });
+
+    function setNativeStatusBar(visible) {
+      const StatusBar = nativePlugin('StatusBar');
+      if (!StatusBar) return;
+      if (visible) {
+        StatusBar.show().catch(() => {});
+      } else {
+        StatusBar.hide().catch(() => {});
+      }
+    }
+
+    function setNativeKeepAwake(awake) {
+      const KeepAwake = nativePlugin('KeepAwake');
+      if (!KeepAwake) return;
+      if (awake) {
+        KeepAwake.keepAwake().catch(() => {});
+      } else {
+        KeepAwake.allowSleep().catch(() => {});
+      }
+    }
+
+    async function nativeShare(title, url) {
+      const Share = nativePlugin('Share');
+      if (!Share) return false;
+      try {
+        await Share.share({ title, url, dialogTitle: 'Share schedule' });
+        return true;
+      } catch (err) {
+        if (err && /cancel/i.test(err.message || '')) return true; // user cancel = success
+        console.warn('native share failed', err);
+        return false;
+      }
+    }
+
+    function nativeHaptic(intensity = 'light') {
+      const Haptics = nativePlugin('Haptics');
+      if (!Haptics) return;
+      const styleMap = { light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY' };
+      const style = styleMap[intensity] || 'LIGHT';
+      Haptics.impact({ style }).catch(() => {});
+    }
 
     // Six visual fields that get copied onto a new schedule's settings.
     // Source is state.settings (the global defaults). audioEnabled is excluded —
@@ -2324,7 +2403,7 @@
       event.target.value = '';
     }
 
-    function handleShare() {
+    async function handleShare() {
       try {
         const sched = getCurrentSchedule();
         const eff = getEffectiveSettings();
@@ -2342,6 +2421,8 @@
         const json = JSON.stringify(payload);
         const encoded = btoa(unescape(encodeURIComponent(json)));
         const url = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
+        const shareTitle = sched.name || 'Visual Schedule';
+        if (await nativeShare(shareTitle, url)) return;
         navigator.clipboard.writeText(url).then(() => {
           state.linkCopied = true;
           render();
@@ -2370,6 +2451,8 @@
       state.isDragging = false;
       state.pauseOffset = 0;
       state.lastPauseStart = 0;
+      setNativeStatusBar(false);
+      setNativeKeepAwake(true);
 
       // Sync position from wall clock
       syncPositionFromClock();
@@ -2435,6 +2518,7 @@
       if (state.currentBlockIndex !== lastBlockIndex) {
         lastBlockIndex = state.currentBlockIndex;
         state.warningsFiredForBlock.clear(); // fresh warnings for the new block
+        nativeHaptic('medium'); // tactile cue on block transition
         if (state.currentBlockIndex >= getBlocks().length) {
           // Embed mode (homepage demo): silently loop the schedule from the top.
           if (state.embedMode) {
@@ -5204,6 +5288,8 @@
           state.warningsFiredForBlock.add(t);
           fireWarningPulse();
           if (state.settings.audioEnabled) playWarningChime(t);
+          // Haptics fire independently of audio — light for 120/60/30s, medium for 10s
+          nativeHaptic(t === 10 ? 'medium' : 'light');
         }
       }
     }
@@ -5293,6 +5379,8 @@
       state.showSettings = false;
       state.openStylePicker = null;
       state.sessionSettings = {};
+      setNativeStatusBar(true);
+      setNativeKeepAwake(false);
       render();
     }
 
@@ -5619,6 +5707,17 @@
       // Notify parent that the embed is ready (parent can queue setMode immediately)
       try { window.parent.postMessage({ type: 'embedReady' }, '*'); } catch (_) {}
     }
+
+    // Release keep-awake when the app goes to the background; restore when it
+    // returns to the foreground while a run is still active.
+    document.addEventListener('visibilitychange', () => {
+      const inRun = state.mode === 'RUN';
+      if (document.hidden) {
+        setNativeKeepAwake(false);
+      } else if (inRun) {
+        setNativeKeepAwake(true);
+      }
+    });
 
     // ===== INIT =====
     loadState();
