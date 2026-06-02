@@ -10,6 +10,8 @@ The whole product ships as a **single self-contained `.html` file** (`vissched.h
 
 **→ [vissched.com](https://vissched.com)**
 
+**iOS app:** coming soon — TestFlight then App Store. Link will be added here at launch.
+
 Or open [`vissched.html`](vissched.html) directly in any modern browser if you'd rather host it yourself.
 
 Schedules persist in `localStorage` and can also be encoded directly into the URL (`?s=…`), so you can bookmark, share, or hand off a schedule just by copying a link.
