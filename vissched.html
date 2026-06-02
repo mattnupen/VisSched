@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>VisSched - Visual Schedule</title>
   <link rel="icon" type="image/svg+xml" href="Icons/icon-stackedcheck/vissched.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="Icons/icon-stackedcheck/vissched-32.png" />
@@ -13,7 +13,13 @@
   <style>
     /* ===== RESET & BASE ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overscroll-behavior: none; }
+    html, body {
+      height: 100%;
+      overscroll-behavior: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #f0f9ff;
@@ -23,6 +29,12 @@
     @supports (height: 100dvh) { body { height: 100dvh; } }
     ::selection { background: #c7d2fe; }
     input, textarea, select, button { font-family: inherit; }
+    /* Allow text selection and the long-press callout inside input fields */
+    input, textarea, [contenteditable="true"] {
+      -webkit-touch-callout: default;
+      -webkit-user-select: text;
+      user-select: text;
+    }
     button { cursor: pointer; border: none; background: none; }
 
     /* ===== SCROLLBAR ===== */
