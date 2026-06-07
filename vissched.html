@@ -1085,6 +1085,11 @@
       width: 100%; height: 100%; display: block;
     }
 
+    .fishtank-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: linear-gradient(to bottom, #ecfeff 0%, #cffafe 100%);
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1504,6 +1509,7 @@
       { id: 'gophers',   label: 'Gopher Pop',        icon: '🐹', desc: 'Gophers rise from their holes', tint: '#fde68a', category: 'nature', render: (c) => renderGophers(c) },
       { id: 'chickens',  label: 'Hatch Day',         icon: '🐣', desc: 'Eggs hatch into chicks',     tint: '#fed7aa', category: 'nature', render: (c) => renderChickens(c) },
       { id: 'aquarium',  label: 'Aquarium',          icon: '🐠', desc: 'Fish swim past',             tint: '#bae6fd', category: 'nature', render: (c) => renderAquarium(c.progress01, c.countdown, c.title) },
+      { id: 'fishtank',  label: 'Fish Tank',         icon: '🪸', desc: 'Tank fills with water',      tint: '#99f6e4', category: 'nature', render: (c) => renderFishTank(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -4950,6 +4956,197 @@
           </div>
           <div class="visual-countdown-overlay" id="visualCountdown">${countdown}</div>
         </div>`;
+    }
+
+    function renderFishTank(c) {
+      // Calm rounded glass aquarium that slowly FILLS with water as progress rises.
+      // Everything is a pure function of c.progress01 and c.t (raw elapsed seconds)
+      // so it re-renders smoothly every 100ms with no CSS/SMIL state to reset.
+      const t = c.t || 0;
+      const p = c.progress01;
+
+      // ---------- Tank geometry (viewBox 0 0 800 500) ----------
+      const tankX = 90, tankW = 620;       // glass inner left / width
+      const glassTopY = 60;                // top rim of the water area
+      const glassBotY = 430;               // sand surface / water floor
+      const tankRight = tankX + tankW;
+
+      // Water surface y: near the bottom at progress 0, up to the rim at progress 1.
+      const waterTopY = glassBotY - p * (glassBotY - glassTopY);
+      const waterH = glassBotY - waterTopY;
+
+      // Gentle surface ripple — crest offsets driven by sin(t + x).
+      const rippleAmp = 4;
+      function surfaceY(x) {
+        return waterTopY + Math.sin(t * 0.8 + x * 0.018) * rippleAmp
+                         + Math.sin(t * 0.45 + x * 0.009) * (rippleAmp * 0.5);
+      }
+      // Build a smooth-ish polyline for the rippling top edge.
+      const steps = 16;
+      let surfacePts = '';
+      for (let i = 0; i <= steps; i++) {
+        const x = tankX + (tankW * i) / steps;
+        surfacePts += `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)},${surfaceY(x).toFixed(1)} `;
+      }
+      // Closed water body path: rippling top edge, then down the sides to the floor.
+      const waterBody = `${surfacePts} L ${tankRight.toFixed(1)},${glassBotY.toFixed(1)} L ${tankX.toFixed(1)},${glassBotY.toFixed(1)} Z`;
+      // Surface highlight stroke (a thin bright line tracing the ripple).
+      const surfaceLine = surfacePts;
+
+      // ---------- Seaweed: grows taller with progress and sways ----------
+      const SEAWEED = [
+        { x: 160, max: 230, phase: 0.0, w: 11, c1: '#16a34a', c2: '#22c55e' },
+        { x: 210, max: 180, phase: 1.4, w: 8,  c1: '#15803d', c2: '#22c55e' },
+        { x: 560, max: 250, phase: 2.7, w: 12, c1: '#16a34a', c2: '#4ade80' },
+        { x: 610, max: 190, phase: 4.1, w: 8,  c1: '#15803d', c2: '#22c55e' },
+      ];
+      let seaweedHTML = '';
+      for (const s of SEAWEED) {
+        const height = s.max * (0.25 + 0.75 * p);   // a little present even early, grows in
+        const sway = Math.sin(t * 0.55 + s.phase) * (8 + p * 10);
+        const topY = glassBotY - height;
+        const midY = glassBotY - height * 0.5;
+        seaweedHTML += `
+          <path d="M ${s.x},${glassBotY} Q ${(s.x + sway).toFixed(1)},${midY.toFixed(1)} ${(s.x + sway * 0.4).toFixed(1)},${topY.toFixed(1)}"
+                fill="none" stroke="${s.c1}" stroke-width="${s.w}" stroke-linecap="round" opacity="0.85"/>
+          <path d="M ${s.x},${glassBotY} Q ${(s.x + sway).toFixed(1)},${midY.toFixed(1)} ${(s.x + sway * 0.4).toFixed(1)},${topY.toFixed(1)}"
+                fill="none" stroke="${s.c2}" stroke-width="${(s.w * 0.4).toFixed(1)}" stroke-linecap="round" opacity="0.9"/>`;
+      }
+
+      // ---------- Bubbles: drift upward, clipped to the water region ----------
+      const BUBBLES = [
+        { x: 200, speed: 26, size: 5, phase: 0.0 },
+        { x: 300, speed: 20, size: 3, phase: 90 },
+        { x: 410, speed: 30, size: 6, phase: 180 },
+        { x: 520, speed: 22, size: 4, phase: 60 },
+        { x: 590, speed: 25, size: 4, phase: 140 },
+        { x: 250, speed: 18, size: 3, phase: 220 },
+      ];
+      let bubblesHTML = '';
+      const bubbleRange = glassBotY - glassTopY + 40;
+      for (const b of BUBBLES) {
+        const y = glassBotY - ((t * b.speed + b.phase) % bubbleRange);
+        const sway = Math.sin(t * 1.1 + b.phase) * 5;
+        const cx = b.x + sway;
+        bubblesHTML += `<circle cx="${cx.toFixed(1)}" cy="${y.toFixed(1)}" r="${b.size}" fill="rgba(236,254,255,0.35)" stroke="rgba(255,255,255,0.85)" stroke-width="0.9"/>`;
+        bubblesHTML += `<circle cx="${(cx - b.size * 0.35).toFixed(1)}" cy="${(y - b.size * 0.35).toFixed(1)}" r="${(b.size * 0.3).toFixed(1)}" fill="rgba(255,255,255,0.9)"/>`;
+      }
+
+      // ---------- Fish: glide in once the water is deep enough ----------
+      function fishSvg(cfg) {
+        const phase = t * cfg.speed + cfg.phase;
+        const x = 400 + (tankW * 0.42) * Math.sin(phase);
+        const yc = cfg.yBase + cfg.yAmp * Math.sin(phase * 0.7 + cfg.phase);
+        const facing = Math.cos(phase) >= 0 ? 1 : -1;
+        const tailSkew = 11 * Math.sin(t * cfg.flap);
+        const bob = 1.5 * Math.cos(t * cfg.flap + 0.5);
+        return `
+          <g transform="translate(${x.toFixed(1)},${(yc + bob).toFixed(1)}) scale(${(facing * cfg.scale).toFixed(2)},${cfg.scale.toFixed(2)})">
+            <g transform="translate(-20,0) skewX(${tailSkew.toFixed(1)})">
+              <path d="M 0,0 L -15,-11 L -9,0 L -15,11 Z" fill="${cfg.tail}"/>
+              <path d="M -9,0 L -15,-8 L -15,8 Z" fill="${cfg.fin}" opacity="0.6"/>
+            </g>
+            <path d="M -3,-10 L 2,-18 L 10,-10 Z" fill="${cfg.fin}"/>
+            <path d="M 0,10 L 5,16 L 11,10 Z" fill="${cfg.fin}"/>
+            <ellipse cx="0" cy="0" rx="21" ry="11" fill="${cfg.body}"/>
+            <ellipse cx="-3" cy="-4" rx="10" ry="4" fill="white" opacity="0.22"/>
+            <circle cx="12" cy="-3" r="2.6" fill="white"/>
+            <circle cx="13" cy="-3" r="1.5" fill="#1c1917"/>
+            <circle cx="13.3" cy="-3.4" r="0.5" fill="white"/>
+            <path d="M 18,1 Q 20,2 19,3" fill="none" stroke="#1c1917" stroke-width="0.8"/>
+          </g>`;
+      }
+      // Fish swim within the current water column (yBase recomputed from waterTopY).
+      const swimTop = waterTopY + 50;
+      const swimBot = glassBotY - 40;
+      const FISH = [
+        { body: '#dc2626', tail: '#b91c1c', fin: '#991b1b', scale: 1.05, flap: 5.5, speed: 0.16, phase: 0.0,
+          yBase: (swimTop + swimBot) / 2 - 18, yAmp: Math.max(0, (swimBot - swimTop) / 2 - 25) },
+        { body: '#f59e0b', tail: '#d97706', fin: '#b45309', scale: 0.92, flap: 6.0, speed: 0.13, phase: 2.6,
+          yBase: (swimTop + swimBot) / 2 + 22, yAmp: Math.max(0, (swimBot - swimTop) / 2 - 30) },
+      ];
+      let fishHTML = '';
+      if (p > 0.4) fishHTML += fishSvg(FISH[0]);
+      if (p > 0.6) fishHTML += fishSvg(FISH[1]);
+
+      // ---------- Sand texture dots (deterministic, sit on the floor) ----------
+      let sandDots = '';
+      for (let i = 0; i < 40; i++) {
+        const x = tankX + ((i * 71 + 23) % tankW);
+        const y = glassBotY + 6 + ((i * 37 + 11) % 28);
+        const r = 0.5 + (i % 4) * 0.3;
+        sandDots += `<circle cx="${x}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="#b45309" opacity="0.4"/>`;
+      }
+
+      // Slow caustic light shimmer inside the water.
+      const causticOff = (t * 4) % 120;
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="fishtank-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="ftWater" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="#5eead4" stop-opacity="0.78"/>
+            <stop offset="55%"  stop-color="#2dd4bf" stop-opacity="0.82"/>
+            <stop offset="100%" stop-color="#14b8a6" stop-opacity="0.88"/>
+          </linearGradient>
+          <linearGradient id="ftSand" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stop-color="#fcd9a5"/>
+            <stop offset="100%" stop-color="#e0a96d"/>
+          </linearGradient>
+          <linearGradient id="ftCaustic" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stop-color="rgba(255,255,255,0.4)"/>
+            <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+          </linearGradient>
+          <clipPath id="ftWaterClip">
+            <path d="${waterBody}"/>
+          </clipPath>
+        </defs>
+
+        <!-- Sandy bottom (rounded so it sits inside the glass) -->
+        <path d="M ${tankX},${glassBotY} L ${tankRight},${glassBotY} L ${tankRight},${(glassBotY + 30).toFixed(1)} Q ${tankRight},${(glassBotY + 44).toFixed(1)} ${(tankRight - 14).toFixed(1)},${(glassBotY + 44).toFixed(1)} L ${(tankX + 14).toFixed(1)},${(glassBotY + 44).toFixed(1)} Q ${tankX},${(glassBotY + 44).toFixed(1)} ${tankX},${(glassBotY + 30).toFixed(1)} Z"
+              fill="url(#ftSand)"/>
+        ${sandDots}
+        <!-- small rocks resting on the sand -->
+        <ellipse cx="270" cy="448" rx="34" ry="11" fill="#a8a29e"/>
+        <ellipse cx="262" cy="444" rx="18" ry="6" fill="#d6d3d1"/>
+        <ellipse cx="500" cy="450" rx="28" ry="9" fill="#a8a29e"/>
+
+        <!-- Water body (rippling top edge), clipped contents on top -->
+        <path d="${waterBody}" fill="url(#ftWater)"/>
+
+        <g clip-path="url(#ftWaterClip)">
+          <!-- caustic light shimmer -->
+          <g opacity="0.22">
+            <path d="M ${(120 + causticOff * 0.5).toFixed(1)},${glassTopY} L ${(170 + causticOff * 0.5).toFixed(1)},${glassBotY} L ${(200 + causticOff * 0.5).toFixed(1)},${glassBotY} L ${(150 + causticOff * 0.5).toFixed(1)},${glassTopY} Z" fill="url(#ftCaustic)"/>
+            <path d="M ${(380 + causticOff * 0.4).toFixed(1)},${glassTopY} L ${(440 + causticOff * 0.4).toFixed(1)},${glassBotY} L ${(470 + causticOff * 0.4).toFixed(1)},${glassBotY} L ${(410 + causticOff * 0.4).toFixed(1)},${glassTopY} Z" fill="url(#ftCaustic)"/>
+            <path d="M ${(580 + causticOff * 0.45).toFixed(1)},${glassTopY} L ${(640 + causticOff * 0.45).toFixed(1)},${glassBotY} L ${(670 + causticOff * 0.45).toFixed(1)},${glassBotY} L ${(610 + causticOff * 0.45).toFixed(1)},${glassTopY} Z" fill="url(#ftCaustic)"/>
+          </g>
+          <!-- seaweed (rooted in sand, sways) -->
+          ${seaweedHTML}
+          <!-- fish, only visible once water is deep enough -->
+          ${fishHTML}
+          <!-- bubbles drifting up -->
+          ${bubblesHTML}
+        </g>
+
+        <!-- Bright rippling surface line -->
+        <path d="${surfaceLine}" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2" stroke-linecap="round"/>
+
+        <!-- Glass tank outline (rounded), drawn last so it frames everything -->
+        <rect x="${(tankX - 14).toFixed(1)}" y="${(glassTopY - 18).toFixed(1)}" width="${(tankW + 28).toFixed(1)}" height="${(glassBotY - glassTopY + 80).toFixed(1)}"
+              rx="34" ry="34" fill="none" stroke="#a5f3fc" stroke-width="10" opacity="0.9"/>
+        <rect x="${(tankX - 14).toFixed(1)}" y="${(glassTopY - 18).toFixed(1)}" width="${(tankW + 28).toFixed(1)}" height="${(glassBotY - glassTopY + 80).toFixed(1)}"
+              rx="34" ry="34" fill="none" stroke="#67e8f9" stroke-width="3"/>
+        <!-- subtle glass highlight on the left -->
+        <path d="M ${(tankX + 4).toFixed(1)},${(glassTopY + 20).toFixed(1)} Q ${(tankX - 4).toFixed(1)},${((glassTopY + glassBotY) / 2).toFixed(1)} ${(tankX + 4).toFixed(1)},${(glassBotY - 10).toFixed(1)}"
+              fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
     }
 
     function renderTrain(progress, countdown, title) {
