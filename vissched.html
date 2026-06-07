@@ -1104,6 +1104,11 @@
       border-radius: 12px; background: linear-gradient(to bottom, #4c1d95 0%, #6d28d9 40%, #b45309 100%);
     }
 
+    .blockstacker-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: #fef3c7;
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1527,6 +1532,7 @@
       { id: 'fishtank',  label: 'Fish Tank',         icon: '🪸', desc: 'Tank fills with water',      tint: '#99f6e4', category: 'nature', render: (c) => renderFishTank(c) },
       { id: 'metamorphosis', label: 'Metamorphosis', icon: '🦋', desc: 'Caterpillar becomes a butterfly', tint: '#dcfce7', category: 'nature', render: (c) => renderMetamorphosis(c) },
       { id: 'firefly',   label: 'Firefly Jar',       icon: '✨', desc: 'Fireflies fill the jar',     tint: '#ddd6fe', category: 'nature', render: (c) => renderFireflyJar(c) },
+      { id: 'blockstacker', label: 'Block Stacker', icon: '🟦', desc: 'Blocks stack to the top',     tint: '#e0e7ff', category: 'games', render: (c) => renderBlockStacker(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -5805,6 +5811,126 @@
         <path d="M 470,182 Q 474,250 470,360" fill="none" stroke="#f1f5f9" stroke-width="3" stroke-linecap="round" opacity="0.18"/>
         <!-- Rim line under the neck -->
         <path d="M 312,170 Q 312,162 320,162 L 480,162 Q 488,162 488,170" fill="none" stroke="#e2e8f0" stroke-width="2" opacity="0.6"/>
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
+    }
+
+    function renderBlockStacker(c) {
+      // Tetris-style "Block Stacker": a dark well fills from the bottom as
+      // progress grows. Pure function of c.progress01 and c.t — filled rows are
+      // a function of doneCount, the dropping block a function of activeFrac.
+      // No Math.random, no CSS/SMIL state to reset (only sin(t) ambient shimmer).
+      const t = c.t || 0;
+      const p = c.progress01;
+
+      // ---------- Well geometry (viewBox 0 0 800 500) ----------
+      const COLS = 6, ROWS = 10;
+      const wellX = 280, wellY = 30;        // top-left of the well interior
+      const cell = 44;                      // square cell size
+      const wellW = COLS * cell;            // 264
+      const wellH = ROWS * cell;            // 440
+      const wellRight = wellX + wellW;
+      const wellBottom = wellY + wellH;
+      const gap = 3;                        // inset between block and cell edges
+
+      // ---------- Discrete-count mapping (C4) ----------
+      const n = p * ROWS;
+      const doneCount = Math.floor(n);        // fully-filled rows from the bottom
+      const activeFrac = n - doneCount;       // 0→1 drop progress of current block
+      const full = p >= 1;
+
+      const palette = ['#dc2626', '#f59e0b', '#fde047', '#22c55e', '#14b8a6'];
+      // Darker/lighter helpers for bevel — hand-paired with the palette.
+      const darker = { '#dc2626':'#991b1b', '#f59e0b':'#b45309', '#fde047':'#ca8a04', '#22c55e':'#15803d', '#14b8a6':'#0f766e' };
+      const lighter = { '#dc2626':'#f87171', '#f59e0b':'#fcd34d', '#fde047':'#fef9c3', '#22c55e':'#86efac', '#14b8a6':'#5eead4' };
+
+      // rowFromBottom: 0 = bottom row. Returns the SVG y for a row's top edge.
+      const rowTopY = (rowFromBottom) => wellBottom - (rowFromBottom + 1) * cell;
+
+      // Draw one beveled tile at grid (col, yTop).
+      const tile = (col, yTop, base) => {
+        const x = wellX + col * cell + gap;
+        const y = yTop + gap;
+        const s = cell - gap * 2;            // tile size
+        const hl = lighter[base], dk = darker[base];
+        const b = 5;                         // bevel thickness
+        return `
+          <g>
+            <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${s}" height="${s}" rx="4" fill="${base}"/>
+            <!-- top-left highlight -->
+            <path d="M ${x.toFixed(1)},${(y+s).toFixed(1)} L ${x.toFixed(1)},${y.toFixed(1)} L ${(x+s).toFixed(1)},${y.toFixed(1)} L ${(x+s-b).toFixed(1)},${(y+b).toFixed(1)} L ${(x+b).toFixed(1)},${(y+b).toFixed(1)} L ${(x+b).toFixed(1)},${(y+s-b).toFixed(1)} Z" fill="${hl}" opacity="0.85"/>
+            <!-- bottom-right shade -->
+            <path d="M ${(x+s).toFixed(1)},${y.toFixed(1)} L ${(x+s).toFixed(1)},${(y+s).toFixed(1)} L ${x.toFixed(1)},${(y+s).toFixed(1)} L ${(x+b).toFixed(1)},${(y+s-b).toFixed(1)} L ${(x+s-b).toFixed(1)},${(y+s-b).toFixed(1)} L ${(x+s-b).toFixed(1)},${(y+b).toFixed(1)} Z" fill="${dk}" opacity="0.85"/>
+          </g>`;
+      };
+
+      // ---------- Filled rows (bottom doneCount rows) ----------
+      let blocksSvg = '';
+      for (let r = 0; r < doneCount && r < ROWS; r++) {
+        const yTop = rowTopY(r);
+        for (let col = 0; col < COLS; col++) {
+          const base = palette[(r + col) % 5];
+          blocksSvg += tile(col, yTop, base);
+        }
+      }
+
+      // ---------- Dropping current row (only if not full) ----------
+      if (doneCount < ROWS) {
+        const r = doneCount;
+        const targetY = rowTopY(r);
+        // Interpolate from the top of the well down to the target row.
+        const dropY = wellY + (targetY - wellY) * activeFrac;
+        for (let col = 0; col < COLS; col++) {
+          const base = palette[(r + col) % 5];
+          blocksSvg += tile(col, dropY, base);
+        }
+      }
+
+      // ---------- Faint grid lines in the empty part of the well ----------
+      // Empty region spans from wellY down to the top of the filled stack.
+      const filledTopY = rowTopY(Math.min(doneCount, ROWS) - 1); // top of highest filled row
+      const emptyBottomY = doneCount > 0 ? filledTopY : wellBottom;
+      let gridSvg = '';
+      for (let col = 1; col < COLS; col++) {
+        const gx = wellX + col * cell;
+        gridSvg += `<line x1="${gx}" y1="${wellY}" x2="${gx}" y2="${emptyBottomY.toFixed(1)}" stroke="#1e293b" stroke-width="1" opacity="0.5"/>`;
+      }
+      for (let r = 1; r < ROWS; r++) {
+        const gy = wellY + r * cell;
+        if (gy <= emptyBottomY + 0.5) {
+          gridSvg += `<line x1="${wellX}" y1="${gy}" x2="${wellRight}" y2="${gy}" stroke="#1e293b" stroke-width="1" opacity="0.5"/>`;
+        }
+      }
+
+      // ---------- End glow (faint shimmer via sin(t)) ----------
+      let glowSvg = '';
+      if (full) {
+        const shimmer = (0.5 + 0.5 * Math.abs(Math.sin(t * 1.6)));
+        const fillOp = (0.10 + 0.10 * shimmer).toFixed(2);   // gentle wash, keeps blocks readable
+        const ringOp = (0.45 + 0.45 * shimmer).toFixed(2);   // brighter outer ring carries the celebration
+        glowSvg = `
+          <rect x="${wellX}" y="${wellY}" width="${wellW}" height="${wellH}" rx="10" fill="#fffbeb" opacity="${fillOp}"/>
+          <rect x="${(wellX - 7).toFixed(1)}" y="${(wellY - 7).toFixed(1)}" width="${wellW + 14}" height="${wellH + 14}" rx="16" fill="none" stroke="#fde047" stroke-width="5" opacity="${ringOp}"/>
+          <rect x="${(wellX - 12).toFixed(1)}" y="${(wellY - 12).toFixed(1)}" width="${wellW + 24}" height="${wellH + 24}" rx="20" fill="none" stroke="#fde047" stroke-width="3" opacity="${(ringOp * 0.5).toFixed(2)}"/>`;
+      }
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="blockstacker-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <!-- Well outer frame -->
+        <rect x="${(wellX - 10).toFixed(1)}" y="${(wellY - 10).toFixed(1)}" width="${wellW + 20}" height="${wellH + 20}" rx="14" fill="#cbd5e1"/>
+        <!-- Well interior (dark) -->
+        <rect x="${wellX}" y="${wellY}" width="${wellW}" height="${wellH}" rx="8" fill="#0f172a"/>
+        <!-- Faint grid in empty region -->
+        ${gridSvg}
+        <!-- Stacked + dropping blocks -->
+        ${blocksSvg}
+        <!-- End glow -->
+        ${glowSvg}
       </svg>
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
