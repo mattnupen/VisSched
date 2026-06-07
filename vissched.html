@@ -1462,19 +1462,26 @@
 
     // Display metadata for view-mode pickers in the editor.
     // Order = display order in the picker.
+    const VIEW_CATEGORIES = [
+      { id: 'classic', label: 'Classic' },
+      { id: 'journey', label: 'Journey' },
+      { id: 'nature',  label: 'Nature'  },
+      { id: 'games',   label: 'Games'   },
+    ];
+
     const VIEW_MODE_META = [
-      { id: 'schedule',  label: 'Schedule List',     icon: '≡',  desc: 'Classic block list',         tint: '#f1f5f9' },
-      { id: 'flowers',   label: 'Growing Sunflower', icon: '🌻', desc: 'Flower grows as time passes', tint: '#fef3c7' },
-      { id: 'rocket',    label: 'Rocket Launch',     icon: '🚀', desc: 'Rocket rises toward space',  tint: '#dbeafe' },
-      { id: 'chickens',  label: 'Hatching Chickens', icon: '🐔', desc: 'Eggs hatch over the timer',  tint: '#fed7aa' },
-      { id: 'gophers',   label: 'Pop-Up Gophers',    icon: '🐹', desc: 'Gophers pop in and out',     tint: '#fde68a' },
-      { id: 'balloon',   label: 'Floating Balloon',  icon: '🎈', desc: 'Balloon drifts upward',      tint: '#fce7f3' },
-      { id: 'bomb',      label: 'Cartoon Bomb',      icon: '💣', desc: 'Fuse burns down',            tint: '#fee2e2' },
-      { id: 'hourglass', label: 'Hourglass',         icon: '⏳', desc: 'Sand falls as time passes',  tint: '#e0e7ff' },
-      { id: 'candle',    label: 'Melting Candle',    icon: '🕯️', desc: 'Candle melts down',          tint: '#fef3c7' },
-      { id: 'water',     label: 'Filling Glass',     icon: '💧', desc: 'Glass fills up',             tint: '#cffafe' },
-      { id: 'aquarium',  label: 'Aquarium',          icon: '🐠', desc: 'Fish swim past',             tint: '#bae6fd' },
-      { id: 'train',     label: 'Train to Station',  icon: '🚂', desc: 'Train rolls toward station', tint: '#dcfce7' },
+      { id: 'schedule',  label: 'Schedule List',     icon: '≡',  desc: 'Classic block list',         tint: '#f1f5f9', category: 'basics' },
+      { id: 'hourglass', label: 'Hourglass',         icon: '⏳', desc: 'Sand falls as time passes',  tint: '#e0e7ff', category: 'classic', render: (c) => renderHourglass(c.progress01, c.countdown, c.title) },
+      { id: 'candle',    label: 'Melting Candle',    icon: '🕯️', desc: 'Candle melts down',          tint: '#fef3c7', category: 'classic', render: (c) => renderCandle(c.progress01, c.countdown, c.title) },
+      { id: 'water',     label: 'Filling Glass',     icon: '💧', desc: 'Glass fills up',             tint: '#cffafe', category: 'classic', render: (c) => renderWater(c.progress01, c.countdown, c.title) },
+      { id: 'bomb',      label: 'Cartoon Bomb',      icon: '💣', desc: 'Fuse burns down',            tint: '#fee2e2', category: 'classic', render: (c) => renderBomb(c.block, c.progress01, c.countdown, c.title) },
+      { id: 'rocket',    label: 'Rocket Launch',     icon: '🚀', desc: 'Rocket rises toward space',  tint: '#dbeafe', category: 'journey', render: (c) => renderRocket(c.progress01, c.countdown, c.title) },
+      { id: 'train',     label: 'Train to Station',  icon: '🚂', desc: 'Train rolls toward station', tint: '#dcfce7', category: 'journey', render: (c) => renderTrain(c.progress01, c.countdown, c.title) },
+      { id: 'balloon',   label: 'Floating Balloon',  icon: '🎈', desc: 'Balloon drifts upward',      tint: '#fce7f3', category: 'journey', render: (c) => renderBalloon(c.progress01, c.countdown, c.title) },
+      { id: 'flowers',   label: 'Growing Sunflower', icon: '🌻', desc: 'Flower grows as time passes', tint: '#fef3c7', category: 'nature', render: (c) => renderFlower(c.title, c.progress01, c.countdown) },
+      { id: 'gophers',   label: 'Pop-Up Gophers',    icon: '🐹', desc: 'Gophers rise from their holes', tint: '#fde68a', category: 'nature', render: (c) => renderGophers(c.block, c.countdown) },
+      { id: 'chickens',  label: 'Hatching Chickens', icon: '🐣', desc: 'Eggs hatch into chicks',     tint: '#fed7aa', category: 'nature', render: (c) => renderChickens(c.block, c.countdown) },
+      { id: 'aquarium',  label: 'Aquarium',          icon: '🐠', desc: 'Fish swim past',             tint: '#bae6fd', category: 'nature', render: (c) => renderAquarium(c.progress01, c.countdown, c.title) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -2833,18 +2840,9 @@
       const remaining = (block.durationMinutes * 60) - state.secondsElapsedInBlock;
       const countdown = formatTime(remaining);
       const title = escHTML(block.title);
-
-      if (viewMode === 'flowers') return renderFlower(title, progress01, countdown);
-      if (viewMode === 'chickens') return renderChickens(block, countdown);
-      if (viewMode === 'gophers') return renderGophers(block, countdown);
-      if (viewMode === 'balloon') return renderBalloon(progress01, countdown, title);
-      if (viewMode === 'bomb') return renderBomb(block, progress01, countdown, title);
-      if (viewMode === 'hourglass') return renderHourglass(progress01, countdown, title);
-      if (viewMode === 'candle') return renderCandle(progress01, countdown, title);
-      if (viewMode === 'rocket') return renderRocket(progress01, countdown, title);
-      if (viewMode === 'water') return renderWater(progress01, countdown, title);
-      if (viewMode === 'aquarium') return renderAquarium(progress01, countdown, title);
-      if (viewMode === 'train') return renderTrain(progress01, countdown, title);
+      const ctx = { block, progress01, countdown, title, t: state.secondsElapsedInBlock || 0 };
+      const meta = VIEW_MODE_BY_ID[viewMode];
+      if (meta && typeof meta.render === 'function') return meta.render(ctx);
       return '';
     }
 
