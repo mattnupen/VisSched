@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>VisSched - Visual Schedule</title>
   <link rel="icon" type="image/svg+xml" href="Icons/icon-stackedcheck/vissched.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="Icons/icon-stackedcheck/vissched-32.png" />
@@ -11,18 +11,42 @@
   <link rel="apple-touch-icon" sizes="180x180" href="Icons/icon-stackedcheck/vissched-180.png" />
   <link rel="shortcut icon" href="Icons/icon-stackedcheck/favicon.ico" />
   <style>
+    /* ===== SAFE-AREA INSETS (iOS notch / home-bar support) ===== */
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+    }
+
     /* ===== RESET & BASE ===== */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; overscroll-behavior: none; }
+    html, body {
+      height: 100%;
+      overscroll-behavior: none;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #f0f9ff;
       color: #0f172a;
       position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+      padding-left: var(--safe-left);
+      padding-right: var(--safe-right);
     }
     @supports (height: 100dvh) { body { height: 100dvh; } }
     ::selection { background: #c7d2fe; }
     input, textarea, select, button { font-family: inherit; }
+    /* Allow text selection and the long-press callout inside input fields */
+    input, textarea, [contenteditable="true"] {
+      -webkit-touch-callout: default;
+      -webkit-user-select: text;
+      user-select: text;
+    }
     button { cursor: pointer; border: none; background: none; }
 
     /* ===== SCROLLBAR ===== */
@@ -342,6 +366,7 @@
       background: #fff; border-top: 1px solid #e2e8f0;
       padding: 0.75rem 0.75rem 1.25rem; box-shadow: 0 -4px 6px -1px rgba(0,0,0,0.1);
       z-index: 10; flex-shrink: 0;
+      padding-bottom: max(1.25rem, var(--safe-bottom));
     }
     @media (min-width: 640px) { .bottom-bar { padding: 1.5rem; } }
     .bottom-bar-inner {
@@ -399,6 +424,21 @@
     }
     .modal-primary-btn:hover { background: #1e293b; }
 
+    /* ===== SAMPLE PICKER DIALOG ===== */
+    .sample-picker-dialog { padding: 0; border: 0; border-radius: 12px; max-width: 420px; width: calc(100vw - 32px); box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+    .sample-picker-dialog::backdrop { background: rgba(15, 23, 42, 0.4); }
+    .sample-picker-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+    .sample-picker-header h2 { margin: 0; font-size: 18px; font-family: inherit; }
+    .sample-picker-header button { background: transparent; border: 0; font-size: 18px; cursor: pointer; padding: 4px 8px; color: #64748b; }
+    .sample-picker-list { display: grid; gap: 8px; padding: 12px; max-height: 60vh; overflow: auto; }
+    .sample-item { display: block; width: 100%; text-align: left; padding: 12px 14px; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; cursor: pointer; font-family: inherit; }
+    .sample-item:hover { background: #f8fafc; }
+    .sample-name { font-weight: 600; color: #0f172a; font-size: 16px; }
+    .sample-summary { font-size: 13px; color: #64748b; margin-top: 2px; }
+    .sample-picker-footer { padding: 12px 16px; border-top: 1px solid #f1f5f9; text-align: right; }
+    .sample-picker-footer button { background: #fff; border: 1px solid #cbd5e1; color: #0f172a; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    .sample-picker-footer button:hover { background: #f8fafc; }
+
     /* ===== TIMER DISPLAY ===== */
     .timer-container {
       display: flex; flex-direction: column; overflow: hidden;
@@ -443,6 +483,7 @@
     .greeting-banner {
       width: 100%; text-align: center; padding: 1rem; border-bottom: 1px solid var(--border);
       background: var(--block-bg); flex-shrink: 0; z-index: 20; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      padding-top: max(1rem, var(--safe-top));
     }
     .greeting-text {
       font-weight: 800; color: var(--text); font-size: var(--fs-greeting, 36px);
@@ -1194,6 +1235,17 @@
 <body>
   <div id="root"></div>
 
+  <dialog id="sample-picker-dialog" class="sample-picker-dialog">
+    <div class="sample-picker-header">
+      <h2>Start from a sample</h2>
+      <button type="button" onclick="document.getElementById('sample-picker-dialog').close()">✕</button>
+    </div>
+    <div class="sample-picker-list" id="sample-list"></div>
+    <div class="sample-picker-footer">
+      <button type="button" onclick="document.getElementById('sample-picker-dialog').close(); startBlankSchedule();">Start blank</button>
+    </div>
+  </dialog>
+
   <script>
     // ===== SVG ICONS =====
     const ICONS = {
@@ -1238,11 +1290,75 @@
     const EMOJI_OPTIONS = ["👋","📖","📝","🔢","🎨","🎵","💻","🔬","🏃","🍱","🧘","🗣️","🧠","🧹","🎒","🏠","❓","🎉","⭐","⏰"];
 
     const INITIAL_BLOCKS = [
-      { id: '1', title: 'Morning Meeting', durationMinutes: 5, icon: '👋', description: '' },
-      { id: '2', title: 'Lesson Intro', durationMinutes: 10, icon: '🗣️', description: '' },
-      { id: '3', title: 'Work Time', durationMinutes: 20, icon: '📝', description: 'Complete worksheet pg. 12\nCheck with partner\nTurn in to basket' },
-      { id: '4', title: 'Lesson Recap', durationMinutes: 5, icon: '🧠', description: '' },
-      { id: '5', title: 'Packup', durationMinutes: 5, icon: '🎒', description: '' },
+      { id: '1', title: 'Settle in', durationMinutes: 2,  icon: '☕', description: '' },
+      { id: '2', title: 'Focus',     durationMinutes: 25, icon: '🎯', description: '' },
+      { id: '3', title: 'Break',     durationMinutes: 5,  icon: '🌿', description: '' },
+      { id: '4', title: 'Focus',     durationMinutes: 25, icon: '🎯', description: '' },
+      { id: '5', title: 'Wrap up',   durationMinutes: 3,  icon: '✅', description: '' },
+    ];
+
+    const SAMPLE_SCHEDULES = [
+      {
+        name: 'Pomodoro Focus',
+        blocks: [
+          { id: 'pf-1', title: 'Settle in',  durationMinutes: 2,  icon: '☕' },
+          { id: 'pf-2', title: 'Focus',      durationMinutes: 25, icon: '🎯' },
+          { id: 'pf-3', title: 'Break',      durationMinutes: 5,  icon: '🌿' },
+          { id: 'pf-4', title: 'Focus',      durationMinutes: 25, icon: '🎯' },
+          { id: 'pf-5', title: 'Break',      durationMinutes: 5,  icon: '🌿' },
+          { id: 'pf-6', title: 'Focus',      durationMinutes: 25, icon: '🎯' },
+          { id: 'pf-7', title: 'Long break', durationMinutes: 15, icon: '🍵' },
+        ],
+      },
+      {
+        name: 'Morning Routine',
+        blocks: [
+          { id: 'mr-1', title: 'Wake up',      durationMinutes: 5,  icon: '🌅' },
+          { id: 'mr-2', title: 'Stretch',      durationMinutes: 10, icon: '🧘' },
+          { id: 'mr-3', title: 'Shower',       durationMinutes: 10, icon: '🚿' },
+          { id: 'mr-4', title: 'Breakfast',    durationMinutes: 15, icon: '🥣' },
+          { id: 'mr-5', title: 'Get ready',    durationMinutes: 10, icon: '👕' },
+          { id: 'mr-6', title: 'Out the door', durationMinutes: 5,  icon: '🎒' },
+        ],
+      },
+      {
+        name: 'Workout Block',
+        blocks: [
+          { id: 'wo-1', title: 'Warm-up',             durationMinutes: 5,  icon: '🏃' },
+          { id: 'wo-2', title: 'Strength',            durationMinutes: 20, icon: '💪' },
+          { id: 'wo-3', title: 'HIIT',                durationMinutes: 15, icon: '🔥' },
+          { id: 'wo-4', title: 'Stretch & cool down', durationMinutes: 10, icon: '🧘' },
+        ],
+      },
+      {
+        name: 'Evening Wind-Down',
+        blocks: [
+          { id: 'ew-1', title: 'Tidy up',     durationMinutes: 10, icon: '🧹' },
+          { id: 'ew-2', title: 'Dinner',      durationMinutes: 30, icon: '🍽' },
+          { id: 'ew-3', title: 'Screens off', durationMinutes: 10, icon: '📵' },
+          { id: 'ew-4', title: 'Read',        durationMinutes: 20, icon: '📖' },
+          { id: 'ew-5', title: 'Lights out',  durationMinutes: 5,  icon: '🌙' },
+        ],
+      },
+      {
+        name: 'Study Session',
+        blocks: [
+          { id: 'ss-1', title: 'Review last session', durationMinutes: 10, icon: '📚' },
+          { id: 'ss-2', title: 'Deep read',           durationMinutes: 30, icon: '📖' },
+          { id: 'ss-3', title: 'Practice problems',   durationMinutes: 20, icon: '✏️' },
+          { id: 'ss-4', title: 'Recap & flashcards',  durationMinutes: 10, icon: '🃏' },
+        ],
+      },
+      {
+        name: 'Classroom Lesson Block',
+        blocks: [
+          { id: 'cl-1', title: 'Morning Meeting', durationMinutes: 5,  icon: '👋' },
+          { id: 'cl-2', title: 'Lesson Intro',    durationMinutes: 10, icon: '🗣️' },
+          { id: 'cl-3', title: 'Work Time',       durationMinutes: 20, icon: '📝' },
+          { id: 'cl-4', title: 'Recap',           durationMinutes: 5,  icon: '🧠' },
+          { id: 'cl-5', title: 'Packup',          durationMinutes: 5,  icon: '🎒' },
+        ],
+      },
     ];
 
     const STORAGE_KEYS = {
@@ -1261,6 +1377,71 @@
       viewMode: 'schedule',
       audioEnabled: false, // Optional gentle chimes at transition warnings
     };
+
+    // ============================================================================
+    // iOS / Capacitor bridge
+    // All native calls go through window.Capacitor, which exists only when running
+    // inside the iOS app. On the web, every helper here is a no-op.
+    // ============================================================================
+    const isNativeIOS = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const nativePlugin = (name) => (isNativeIOS() && window.Capacitor.Plugins && window.Capacitor.Plugins[name]) || null;
+
+    // Register the Universal Link handler once Capacitor is ready.
+    // Fires when iOS hands us a URL like vissched.com/?s=<base64>
+    document.addEventListener('DOMContentLoaded', () => {
+      const App = nativePlugin('App');
+      if (!App) return;
+      App.addListener('appUrlOpen', (event) => {
+        try {
+          const u = new URL(event.url);
+          const s = u.searchParams.get('s');
+          if (s) handleUrlImport(s);
+        } catch (err) {
+          console.warn('Universal Link parse failed', err);
+        }
+      });
+    });
+
+    function setNativeStatusBar(visible) {
+      const StatusBar = nativePlugin('StatusBar');
+      if (!StatusBar) return;
+      if (visible) {
+        StatusBar.show().catch(() => {});
+      } else {
+        StatusBar.hide().catch(() => {});
+      }
+    }
+
+    function setNativeKeepAwake(awake) {
+      const KeepAwake = nativePlugin('KeepAwake');
+      if (!KeepAwake) return;
+      if (awake) {
+        KeepAwake.keepAwake().catch(() => {});
+      } else {
+        KeepAwake.allowSleep().catch(() => {});
+      }
+    }
+
+    async function nativeShare(title, url) {
+      const Share = nativePlugin('Share');
+      if (!Share) return false;
+      try {
+        await Share.share({ title, url, dialogTitle: 'Share schedule' });
+        return true;
+      } catch (err) {
+        if (err && /cancel/i.test(err.message || '')) return true; // user cancel = success
+        console.warn('native share failed', err);
+        return false;
+      }
+    }
+
+    function nativeHaptic(intensity = 'light') {
+      const Haptics = nativePlugin('Haptics');
+      if (!Haptics) return;
+      const styleMap = { light: 'LIGHT', medium: 'MEDIUM', heavy: 'HEAVY' };
+      const style = styleMap[intensity] || 'LIGHT';
+      Haptics.impact({ style }).catch(() => {});
+    }
 
     // Six visual fields that get copied onto a new schedule's settings.
     // Source is state.settings (the global defaults). audioEnabled is excluded —
@@ -1307,7 +1488,7 @@
     ];
 
     const THEME_META = [
-      { id: 'light',         label: 'Light',         desc: 'Default — bright, classroom-friendly' },
+      { id: 'light',         label: 'Light',         desc: 'Default — bright, easy on the eyes' },
       { id: 'dark',          label: 'Dark',          desc: 'Low-light, calmer' },
       { id: 'warm',          label: 'Warm',          desc: 'Soft yellow, cozy' },
       { id: 'cool',          label: 'Cool',          desc: 'Calming blue' },
@@ -1565,8 +1746,8 @@
       osc.stop(now + dur + 0.05);
     }
 
-    // Threshold-specific chime. 10s gets a two-tone "ding-dong" so students learn
-    // the urgency without anything being harsh.
+    // Threshold-specific chime. 10s gets a two-tone "ding-dong" alert
+    // to signal that the block is about to end.
     function playWarningChime(thresholdSec) {
       switch (thresholdSec) {
         case 120: playChime(523, 400); break; // C5
@@ -1831,7 +2012,7 @@
                     <label class="field-label">Greeting Message (Optional)</label>
                     <input type="text" class="greeting-input"
                       value="${escHTML(sched.greeting || '')}"
-                      placeholder="e.g. Good Morning, Class!"
+                      placeholder="e.g. Good morning"
                       oninput="updateCurrentSchedule(s => s.greeting = this.value); /* no re-render */">
                   </div>
 
@@ -1915,7 +2096,7 @@
             `).join('')}
           </div>
           <div style="border-top:1px solid #f1f5f9;margin-top:0.25rem;padding-top:0.25rem;padding:0.25rem 0.5rem">
-            <button class="new-schedule-btn" onclick="createSchedule()">
+            <button class="new-schedule-btn" onclick="openNewScheduleDialog()">
               ${iconHTML('plus', 'icon-sm')} New Schedule
             </button>
           </div>
@@ -2072,6 +2253,47 @@
       render();
     }
 
+    function createScheduleFromSample(sampleIndex) {
+      const sample = SAMPLE_SCHEDULES[sampleIndex];
+      if (!sample) return;
+      const blocks = sample.blocks.map(b => ({ ...b, description: b.description || '' }));
+      const newId = uuid();
+      state.schedules.push({
+        id: newId,
+        name: sample.name,
+        blocks,
+        greeting: '',
+        lastModified: Date.now(),
+        settings: snapshotGlobalScheduleSettings(),
+      });
+      state.currentScheduleId = newId;
+      state.isScheduleDropdownOpen = false;
+      state.sessionSettings = {};
+      saveSchedules();
+      render();
+    }
+
+    function startBlankSchedule() {
+      createSchedule();
+    }
+
+    function renderSampleList() {
+      const list = document.getElementById('sample-list');
+      if (!list) return;
+      list.innerHTML = SAMPLE_SCHEDULES.map((s, i) => {
+        const totalMin = s.blocks.reduce((a, b) => a + b.durationMinutes, 0);
+        return `<button type="button" class="sample-item" onclick="document.getElementById('sample-picker-dialog').close(); createScheduleFromSample(${i});">
+          <div class="sample-name">${escHTML(s.name)}</div>
+          <div class="sample-summary">${s.blocks.length} blocks · ${totalMin} min</div>
+        </button>`;
+      }).join('');
+    }
+
+    function openNewScheduleDialog() {
+      renderSampleList();
+      document.getElementById('sample-picker-dialog').showModal();
+    }
+
     function deleteSchedule(id) {
       if (state.schedules.length <= 1) { alert('You must have at least one schedule.'); return; }
       if (!confirm('Are you sure you want to delete this schedule?')) return;
@@ -2181,7 +2403,7 @@
       event.target.value = '';
     }
 
-    function handleShare() {
+    async function handleShare() {
       try {
         const sched = getCurrentSchedule();
         const eff = getEffectiveSettings();
@@ -2199,6 +2421,8 @@
         const json = JSON.stringify(payload);
         const encoded = btoa(unescape(encodeURIComponent(json)));
         const url = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
+        const shareTitle = sched.name || 'Visual Schedule';
+        if (await nativeShare(shareTitle, url)) return;
         navigator.clipboard.writeText(url).then(() => {
           state.linkCopied = true;
           render();
@@ -2227,6 +2451,8 @@
       state.isDragging = false;
       state.pauseOffset = 0;
       state.lastPauseStart = 0;
+      setNativeStatusBar(false);
+      setNativeKeepAwake(true);
 
       // Sync position from wall clock
       syncPositionFromClock();
@@ -2292,6 +2518,7 @@
       if (state.currentBlockIndex !== lastBlockIndex) {
         lastBlockIndex = state.currentBlockIndex;
         state.warningsFiredForBlock.clear(); // fresh warnings for the new block
+        nativeHaptic('medium'); // tactile cue on block transition
         if (state.currentBlockIndex >= getBlocks().length) {
           // Embed mode (homepage demo): silently loop the schedule from the top.
           if (state.embedMode) {
@@ -5061,6 +5288,8 @@
           state.warningsFiredForBlock.add(t);
           fireWarningPulse();
           if (state.settings.audioEnabled) playWarningChime(t);
+          // Haptics fire independently of audio — light for 120/60/30s, medium for 10s
+          nativeHaptic(t === 10 ? 'medium' : 'light');
         }
       }
     }
@@ -5150,6 +5379,8 @@
       state.showSettings = false;
       state.openStylePicker = null;
       state.sessionSettings = {};
+      setNativeStatusBar(true);
+      setNativeKeepAwake(false);
       render();
     }
 
@@ -5476,6 +5707,17 @@
       // Notify parent that the embed is ready (parent can queue setMode immediately)
       try { window.parent.postMessage({ type: 'embedReady' }, '*'); } catch (_) {}
     }
+
+    // Release keep-awake when the app goes to the background; restore when it
+    // returns to the foreground while a run is still active.
+    document.addEventListener('visibilitychange', () => {
+      const inRun = state.mode === 'RUN';
+      if (document.hidden) {
+        setNativeKeepAwake(false);
+      } else if (inRun) {
+        setNativeKeepAwake(true);
+      }
+    });
 
     // ===== INIT =====
     loadState();

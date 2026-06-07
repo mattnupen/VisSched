@@ -39,3 +39,16 @@ package-lock.json
 docs/
 tests/
 Icons/
+
+# iOS / Capacitor build artifacts and deployable assets (local only)
+ios/
+www/
+node_modules/
+capacitor.config.ts
+capacitor.config.json
+.well-known/
+privacy.html
+ios-assets/
+
+# Local agent / editor state
+.claude/
