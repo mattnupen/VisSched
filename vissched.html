@@ -5570,18 +5570,15 @@
               <div class="settings-section">
                 <h3 class="settings-section-title">View Mode</h3>
                 <select class="settings-select" onchange="updateSetting('viewMode', this.value)" value="${escHTML(s.viewMode || 'schedule')}">
-                  <option value="schedule" ${s.viewMode === 'schedule' ? 'selected' : ''}>Schedule List</option>
-                  <option value="flowers" ${s.viewMode === 'flowers' ? 'selected' : ''}>Growing Sunflower</option>
-                  <option value="chickens" ${s.viewMode === 'chickens' ? 'selected' : ''}>Hatching Chickens</option>
-                  <option value="gophers" ${s.viewMode === 'gophers' ? 'selected' : ''}>Pop-Up Gophers</option>
-                  <option value="balloon" ${s.viewMode === 'balloon' ? 'selected' : ''}>Floating Balloon</option>
-                  <option value="bomb" ${s.viewMode === 'bomb' ? 'selected' : ''}>Cartoon Bomb</option>
-                  <option value="hourglass" ${s.viewMode === 'hourglass' ? 'selected' : ''}>Hourglass</option>
-                  <option value="candle" ${s.viewMode === 'candle' ? 'selected' : ''}>Melting Candle</option>
-                  <option value="rocket" ${s.viewMode === 'rocket' ? 'selected' : ''}>Rocket Launch</option>
-                  <option value="water" ${s.viewMode === 'water' ? 'selected' : ''}>Filling Glass</option>
-                  <option value="aquarium" ${s.viewMode === 'aquarium' ? 'selected' : ''}>Aquarium</option>
-                  <option value="train" ${s.viewMode === 'train' ? 'selected' : ''}>Train to Station</option>
+                  ${VIEW_MODE_META.filter(v => v.category === 'basics').map(v => `
+                    <option value="${v.id}" ${s.viewMode === v.id ? 'selected' : ''}>${escHTML(v.label)}</option>
+                  `).join('')}
+                  ${VIEW_CATEGORIES.map(cat => {
+                    const opts = VIEW_MODE_META.filter(v => v.category === cat.id).map(v => `
+                      <option value="${v.id}" ${s.viewMode === v.id ? 'selected' : ''}>${escHTML(v.label)}</option>
+                    `).join('');
+                    return opts ? `<optgroup label="${escHTML(cat.label)}">${opts}</optgroup>` : '';
+                  }).join('')}
                 </select>
               </div>
 
