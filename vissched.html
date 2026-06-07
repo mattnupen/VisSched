@@ -689,6 +689,10 @@
       background: linear-gradient(to bottom, #fef9c3 0%, #d9f99d 45%, #4ade80 100%);
     }
     .scene-svg { width: 100%; height: 100%; display: block; }
+    .upaway-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: linear-gradient(to bottom, #60a5fa 0%, #bae6fd 50%, #fef9c3 100%);
+    }
     .chicken-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
       border-radius: 12px;
@@ -1505,6 +1509,7 @@
       { id: 'rocket',    label: 'Rocket Launch',     icon: '🚀', desc: 'Rocket rises toward space',  tint: '#dbeafe', category: 'journey', render: (c) => renderRocket(c.progress01, c.countdown, c.title) },
       { id: 'train',     label: 'Train to Station',  icon: '🚂', desc: 'Train rolls toward station', tint: '#dcfce7', category: 'journey', render: (c) => renderTrain(c.progress01, c.countdown, c.title) },
       { id: 'balloon',   label: 'Floating Balloon',  icon: '🎈', desc: 'Balloon drifts upward',      tint: '#fce7f3', category: 'journey', render: (c) => renderBalloon(c.progress01, c.countdown, c.title) },
+      { id: 'upaway',    label: 'Up & Away',         icon: '🌤️', desc: 'Hot-air balloon climbs the sky', tint: '#e0f2fe', category: 'journey', render: (c) => renderUpAway(c) },
       { id: 'flowers',   label: 'Growing Sunflower', icon: '🌻', desc: 'Flower grows as time passes', tint: '#fef3c7', category: 'nature', render: (c) => renderFlower(c.title, c.progress01, c.countdown) },
       { id: 'gophers',   label: 'Gopher Pop',        icon: '🐹', desc: 'Gophers rise from their holes', tint: '#fde68a', category: 'nature', render: (c) => renderGophers(c) },
       { id: 'chickens',  label: 'Hatch Day',         icon: '🐣', desc: 'Eggs hatch into chicks',     tint: '#fed7aa', category: 'nature', render: (c) => renderChickens(c) },
@@ -3540,6 +3545,209 @@
         ${grass}
         <!-- Holes + gophers -->
         ${scene}
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
+    }
+
+    function renderUpAway(c) {
+      // Up & Away: a coral-and-yellow striped hot-air balloon rising over green
+      // rolling hills. Calm vertical counterpart to the rocket. Everything is a
+      // pure function of c.progress01 (climb) and c.t (ambient drift/sway/flicker)
+      // so re-renders stay smooth — no CSS/SMIL for progress-driven state.
+      const t = c.t;
+      const p = c.progress01;
+
+      // --- Scene geometry (viewBox 0 0 800 500) ---
+      const groundY = 430;        // where the balloon basket sits at progress 0
+      const topY = 90;            // basket-top target at progress 1
+      const climb = groundY - topY;
+      const centerX = 400;
+
+      // Gentle side-to-side sway that grows a touch as it climbs higher.
+      const swayAmp = 22 + p * 14;
+      const balloonX = (centerX + Math.sin(t * 0.6) * swayAmp).toFixed(1);
+      // Basket top rises with progress; small bob for life.
+      const basketTopY = (groundY - p * climb + Math.sin(t * 0.9) * 4).toFixed(1);
+      // Envelope (balloon body) sits above the basket. Gentle tilt with the sway.
+      const tilt = (Math.sin(t * 0.6) * 4).toFixed(2);
+
+      // Flame flicker (deterministic).
+      const flameH = 18 + Math.sin(t * 9) * 5 + Math.sin(t * 14 + 1) * 2;
+      const flameW = 10 + Math.sin(t * 11) * 1.6;
+
+      // Drifting clouds (positions from t, like the balloon scene).
+      const cloud1x = (((t * 5) % 920) - 110).toFixed(1);
+      const cloud2x = (((t * 3.5 + 300) % 920) - 60).toFixed(1);
+      const cloud3x = (((t * 6 + 600) % 920) - 150).toFixed(1);
+
+      // Two birds drifting across.
+      const b1x = (-60 + ((t * 14) % 940)).toFixed(1);
+      const b1y = (110 + Math.sin(t * 0.5) * 12).toFixed(1);
+      const b2x = (-90 + ((t * 11 + 260) % 940)).toFixed(1);
+      const b2y = (150 + Math.sin(t * 0.4 + 1) * 9).toFixed(1);
+      const b1flap = (2 + Math.sin(t * 8) * 4).toFixed(1);
+      const b2flap = (2 + Math.sin(t * 8 + 1.5) * 4).toFixed(1);
+
+      // --- Striped envelope built from vertical gore segments ---
+      // The envelope silhouette is a teardrop: at height y (top -y0 .. bottom +yBot)
+      // its half-width is half(y). Each gore is a vertical "orange slice" between
+      // two normalized horizontal fractions [u0..u1] of that half-width, so the
+      // gores meet cleanly with no folds. Colors alternate coral/yellow.
+      const ryTop = 94, ryBot = 64;            // top apex / mouth depth
+      const maxHalf = 78;                       // max half-width at the belly
+      const bellyY = -8;                        // y of widest point
+      // Half-width profile: smooth teardrop, pinched at apex and mouth.
+      const halfAt = (y) => {
+        if (y <= -ryTop) return 0;
+        if (y >= ryBot) return 14;              // mouth opening half-width
+        // Normalize to -1..1 around belly, shape with cosine.
+        const span = (y < bellyY) ? (bellyY + ryTop) : (ryBot - bellyY);
+        const d = (y - bellyY) / span;          // -1 .. 1
+        const w = maxHalf * Math.pow(Math.cos(d * Math.PI / 2), 0.62);
+        return Math.max(14, w);
+      };
+      // Sample heights down the envelope.
+      const ys = [-ryTop, -ryTop * 0.78, -ryTop * 0.5, bellyY, ryBot * 0.45, ryBot * 0.8, ryBot];
+      const stripeColors = ['#dc2626', '#fbbf24', '#dc2626', '#fde047', '#dc2626', '#fbbf24'];
+      const nGores = 6;
+      const gores = [];
+      // Helper to build one vertical edge (top->bottom) at fraction u of half-width.
+      const edge = (u) => ys.map((y, k) => {
+        const x = u * halfAt(y);
+        return `${k === 0 ? 'L' : 'L'} ${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      for (let i = 0; i < nGores; i++) {
+        const u0 = -1 + (2 * i) / nGores;       // left fraction (-1..1)
+        const u1 = -1 + (2 * (i + 1)) / nGores;  // right fraction
+        // Down the left edge, across the mouth, up the right edge (reversed).
+        const downLeft = ys.map((y, k) => {
+          const x = u0 * halfAt(y);
+          return `${k === 0 ? 'M' : 'L'} ${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        const upRight = ys.slice().reverse().map((y) => {
+          const x = u1 * halfAt(y);
+          return `L ${x.toFixed(1)},${y.toFixed(1)}`;
+        }).join(' ');
+        gores.push(`<path d="${downLeft} ${upRight} Z" fill="${stripeColors[i % stripeColors.length]}"/>`);
+      }
+      // Outer silhouette (for clean rounded edge + shading mask reference).
+      const silTop = ys.map((y, k) => `${k === 0 ? 'M' : 'L'} ${(-halfAt(y)).toFixed(1)},${y.toFixed(1)}`).join(' ');
+      const silBot = ys.slice().reverse().map((y) => `L ${halfAt(y).toFixed(1)},${y.toFixed(1)}`).join(' ');
+      const silPath = `${silTop} ${silBot} Z`;
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="upaway-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="uaSun" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#fff7d6"/>
+            <stop offset="55%" stop-color="#fde68a"/>
+            <stop offset="100%" stop-color="#fcd34d" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="uaEnvShade" cx="40%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+            <stop offset="45%" stop-color="#ffffff" stop-opacity="0"/>
+            <stop offset="100%" stop-color="#000000" stop-opacity="0.22"/>
+          </radialGradient>
+          <linearGradient id="uaBasket" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#b45309"/>
+            <stop offset="50%" stop-color="#92400e"/>
+            <stop offset="100%" stop-color="#78350f"/>
+          </linearGradient>
+          <radialGradient id="uaFlame" cx="50%" cy="75%" r="65%">
+            <stop offset="0%" stop-color="#fff7d6"/>
+            <stop offset="45%" stop-color="#fbbf24"/>
+            <stop offset="100%" stop-color="#ea580c"/>
+          </radialGradient>
+          <filter id="uaShadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="5"/>
+            <feOffset dy="6"/>
+            <feComponentTransfer><feFuncA type="linear" slope="0.28"/></feComponentTransfer>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Sun, top-right -->
+        <g transform="translate(690 80)">
+          <circle r="70" fill="url(#uaSun)"/>
+          <circle r="30" fill="#fde68a"/>
+          <circle r="20" fill="#fef9c3" opacity="0.9"/>
+        </g>
+
+        <!-- Drifting clouds -->
+        <g>
+          <g transform="translate(${cloud1x} 70)">
+            <ellipse cx="0" cy="0" rx="30" ry="16" fill="#ffffff"/>
+            <ellipse cx="26" cy="-9" rx="27" ry="19" fill="#ffffff"/>
+            <ellipse cx="54" cy="-3" rx="24" ry="15" fill="#f8fafc"/>
+            <ellipse cx="76" cy="5" rx="18" ry="11" fill="#ffffff"/>
+          </g>
+          <g transform="translate(${cloud2x} 190) scale(0.82)" opacity="0.92">
+            <ellipse cx="0" cy="0" rx="30" ry="16" fill="#ffffff"/>
+            <ellipse cx="26" cy="-9" rx="27" ry="19" fill="#ffffff"/>
+            <ellipse cx="54" cy="-3" rx="24" ry="15" fill="#f8fafc"/>
+          </g>
+          <g transform="translate(${cloud3x} 320) scale(0.7)" opacity="0.85">
+            <ellipse cx="0" cy="0" rx="30" ry="16" fill="#ffffff"/>
+            <ellipse cx="26" cy="-9" rx="27" ry="19" fill="#ffffff"/>
+            <ellipse cx="54" cy="-3" rx="24" ry="15" fill="#f8fafc"/>
+            <ellipse cx="76" cy="5" rx="18" ry="11" fill="#ffffff"/>
+          </g>
+        </g>
+
+        <!-- Birds -->
+        <path transform="translate(${b1x} ${b1y})" d="M -11,${b1flap} Q 0,-4 11,${b1flap}" fill="none" stroke="#334155" stroke-width="2.5" stroke-linecap="round"/>
+        <path transform="translate(${b2x} ${b2y}) scale(0.8)" d="M -11,${b2flap} Q 0,-4 11,${b2flap}" fill="none" stroke="#475569" stroke-width="2.5" stroke-linecap="round"/>
+
+        <!-- Rolling hills along the bottom -->
+        <path d="M 0,470 C 120,418 240,420 380,452 C 520,484 640,430 800,452 L 800,500 L 0,500 Z" fill="#22c55e"/>
+        <path d="M 0,500 C 160,452 320,470 470,486 C 620,500 720,460 800,478 L 800,500 Z" fill="#16a34a"/>
+        <path d="M 0,500 L 800,500 L 800,492 C 600,500 500,476 360,492 C 220,508 120,486 0,498 Z" fill="#15803d"/>
+
+        <!-- Hot-air balloon group: rises with progress, sways with t -->
+        <g transform="translate(${balloonX} ${basketTopY}) rotate(${tilt})" filter="url(#uaShadow)">
+          <!-- Suspension ropes from envelope mouth (local y≈70) to basket (y=120) -->
+          <line x1="-44" y1="70" x2="-24" y2="120" stroke="#7c5a2e" stroke-width="2.5"/>
+          <line x1="44" y1="70" x2="24" y2="120" stroke="#7c5a2e" stroke-width="2.5"/>
+          <line x1="-16" y1="72" x2="-12" y2="120" stroke="#7c5a2e" stroke-width="2"/>
+          <line x1="16" y1="72" x2="12" y2="120" stroke="#7c5a2e" stroke-width="2"/>
+
+          <!-- Envelope group: shift so the mouth (ryBot) sits at parent y≈70 -->
+          <g transform="translate(0 ${(70 - ryBot).toFixed(1)})">
+            <!-- Soft outer silhouette to round the gore facets -->
+            <path d="${silPath}" fill="none" stroke="#b91c1c" stroke-width="2.5" stroke-linejoin="round" opacity="0.55"/>
+            ${gores.join('\n            ')}
+            <!-- Shading + highlight overlay clipped to the silhouette -->
+            <path d="${silPath}" fill="url(#uaEnvShade)"/>
+            <!-- Mouth ring (bottom opening) -->
+            <ellipse cx="0" cy="${ryBot}" rx="20" ry="7" fill="#7f1d1d"/>
+            <ellipse cx="0" cy="${(ryBot - 1).toFixed(1)}" rx="16" ry="4.5" fill="#b91c1c"/>
+            <!-- Crown ring (top) -->
+            <ellipse cx="0" cy="${(-ryTop + 5).toFixed(1)}" rx="12" ry="4.5" fill="#fef9c3" opacity="0.85"/>
+          </g>
+
+          <!-- Burner flame just below the mouth (mouth at parent y≈70) -->
+          <path d="M 0,${(72 - flameH).toFixed(1)}
+                   C ${(flameW).toFixed(1)},${(72 - flameH * 0.5).toFixed(1)} ${(flameW * 0.7).toFixed(1)},72 0,74
+                   C -${(flameW * 0.7).toFixed(1)},72 -${(flameW).toFixed(1)},${(72 - flameH * 0.5).toFixed(1)} 0,${(72 - flameH).toFixed(1)} Z"
+                fill="url(#uaFlame)"/>
+          <ellipse cx="0" cy="71" rx="4.5" ry="5.5" fill="#fff7d6" opacity="0.85"/>
+
+          <!-- Basket -->
+          <g transform="translate(0 120)">
+            <rect x="-22" y="0" width="44" height="34" rx="5" fill="url(#uaBasket)"/>
+            <!-- Weave lines -->
+            <line x1="-22" y1="11" x2="22" y2="11" stroke="#5c2c0a" stroke-width="1.5" opacity="0.6"/>
+            <line x1="-22" y1="22" x2="22" y2="22" stroke="#5c2c0a" stroke-width="1.5" opacity="0.6"/>
+            <line x1="-7" y1="0" x2="-7" y2="34" stroke="#5c2c0a" stroke-width="1.5" opacity="0.5"/>
+            <line x1="7" y1="0" x2="7" y2="34" stroke="#5c2c0a" stroke-width="1.5" opacity="0.5"/>
+            <rect x="-24" y="-3" width="48" height="6" rx="3" fill="#a16207"/>
+          </g>
+        </g>
       </svg>
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
