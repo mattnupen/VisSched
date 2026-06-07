@@ -1129,6 +1129,11 @@
       border-radius: 12px; background: #fff7ed;
     }
 
+    .dominorun-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: linear-gradient(to bottom, #fef9c3 0%, #fde68a 100%);
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1557,6 +1562,7 @@
       { id: 'snake',     label: 'Snake',             icon: '🐍', desc: 'Snake fills the board',      tint: '#dcfce7', category: 'games', render: (c) => renderSnake(c) },
       { id: 'boardrace', label: 'Board Race',        icon: '🎲', desc: 'Race to the finish flag',    tint: '#fae8ff', category: 'games', render: (c) => renderBoardRace(c) },
       { id: 'jigsaw',    label: 'Jigsaw',            icon: '🧩', desc: 'Puzzle pieces fill in',      tint: '#ffedd5', category: 'games', render: (c) => renderJigsaw(c) },
+      { id: 'dominorun', label: 'Domino Run',        icon: '🁢', desc: 'Dominoes topple in a row',   tint: '#fee2e2', category: 'games', render: (c) => renderDominoRun(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -6614,6 +6620,76 @@
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
   </div>`;
+    }
+
+    function renderDominoRun(c) {
+      // ~15 dominoes on a sandy curved baseline topple L→R as a chain reaction.
+      // Toppled count = progress; the active domino falls by the fractional part.
+      // Deterministic from c.progress01 (fall state) and c.t (settle jiggle).
+      const N = 15;
+      const n = c.progress01 * N;
+      const doneCount = Math.floor(n);
+      const activeFrac = n - doneCount;
+
+      const W = 800, H = 500;
+      const x0 = 70, x1 = 730;             // first/last domino x
+      const baseY = 360;                   // baseline
+      const palette = ['#dc2626', '#f59e0b', '#fde047', '#22c55e', '#14b8a6'];
+
+      // Gently curved baseline: y dips a little in the middle.
+      const yAt = (frac) => baseY - Math.sin(frac * Math.PI) * 28;
+
+      let dominoes = '';
+      for (let i = 0; i < N; i++) {
+        const frac = i / (N - 1);
+        const cx = x0 + (x1 - x0) * frac;
+        const cy = yAt(frac);
+        const color = palette[i % palette.length];
+
+        // Fall angle: 0 = upright, 90deg = flat. Tiles fall to the right (+angle).
+        let angle;
+        if (i < doneCount) {
+          angle = 90;                                  // fully toppled
+        } else if (i === doneCount) {
+          angle = 90 * Math.min(1, activeFrac * 1.15); // mid-fall
+        } else {
+          angle = 0;                                   // upright
+        }
+        // Tiny settle jiggle on freshly-fallen tiles (ambient, from c.t).
+        const settled = (i < doneCount) ? Math.sin(c.t * 6 + i) * 0.6 : 0;
+        const rot = (angle + settled).toFixed(1);
+
+        // Domino body 24w x 64h, pivoting about its bottom edge.
+        // Subtle 3D side face + drop shadow for polish (deterministic, no transitions).
+        dominoes += `
+          <g transform="translate(${cx.toFixed(1)} ${cy.toFixed(1)}) rotate(${rot})">
+            <ellipse cx="3" cy="2" rx="13" ry="4" fill="#000" opacity="0.12"/>
+            <rect x="-12" y="-64" width="24" height="64" rx="4"
+                  fill="${color}" stroke="#1c1917" stroke-width="1.5"/>
+            <rect x="8" y="-62" width="4" height="60" rx="2" fill="#000" opacity="0.18"/>
+            <line x1="-12" y1="-32" x2="12" y2="-32" stroke="#1c1917" stroke-width="1.2" opacity="0.5"/>
+            <circle cx="0" cy="-48" r="2.4" fill="#fff"/>
+            <circle cx="0" cy="-16" r="2.4" fill="#fff"/>
+          </g>`;
+      }
+
+      return `
+        <div class="visual-timer-container">
+          <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+          <div class="dominorun-scene">
+            <svg class="scene-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+              <!-- sandy strip -->
+              <path d="M 0,${baseY + 6} ${Array.from({length: 33}, (_, k) => {
+                const f = k / 32; return `L ${(f * W).toFixed(0)},${(yAt(f) + 6).toFixed(1)}`;
+              }).join(' ')} L ${W},${H} L 0,${H} Z" fill="#fcd9a5"/>
+              <path d="M 0,${baseY + 6} ${Array.from({length: 33}, (_, k) => {
+                const f = k / 32; return `L ${(f * W).toFixed(0)},${(yAt(f) + 6).toFixed(1)}`;
+              }).join(' ')}" fill="none" stroke="#eab676" stroke-width="3"/>
+              ${dominoes}
+            </svg>
+          </div>
+          <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+        </div>`;
     }
 
     function renderTrain(progress, countdown, title) {
