@@ -1124,6 +1124,11 @@
       border-radius: 12px; background: #faf5ff;
     }
 
+    .jigsaw-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: #fff7ed;
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1551,6 +1556,7 @@
       { id: 'pelletmuncher', label: 'Pellet Muncher', icon: '🟡', desc: 'Muncher clears the maze',   tint: '#fef9c3', category: 'games', render: (c) => renderPelletMuncher(c) },
       { id: 'snake',     label: 'Snake',             icon: '🐍', desc: 'Snake fills the board',      tint: '#dcfce7', category: 'games', render: (c) => renderSnake(c) },
       { id: 'boardrace', label: 'Board Race',        icon: '🎲', desc: 'Race to the finish flag',    tint: '#fae8ff', category: 'games', render: (c) => renderBoardRace(c) },
+      { id: 'jigsaw',    label: 'Jigsaw',            icon: '🧩', desc: 'Puzzle pieces fill in',      tint: '#ffedd5', category: 'games', render: (c) => renderJigsaw(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -6424,6 +6430,186 @@
         <!-- pawn shadow + pawn -->
         ${shadowSvg}
         ${pawnSvg}
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
+    }
+
+    function renderJigsaw(c) {
+      // Calm "Jigsaw": a 4-col x 3-row puzzle frame slowly reveals a picture —
+      // a sun rising over green rolling hills with a drifting cloud — as pieces
+      // drop into place one at a time. Pieces placed == progress (C4):
+      //   N=12 cells. n = progress*N. doneCount = floor(n) cells revealed;
+      //   the active cell (=== doneCount) fades its empty-slot overlay out by
+      //   activeFrac (and eases a small drop offset to 0); cells > doneCount stay
+      //   fully covered. Thin grid lines draw the 4x3 puzzle boundaries. At the
+      //   end a soft translucent shine sweeps across the finished picture.
+      //   Pure function of c.progress01 and c.t — no Math.random, no CSS/SMIL
+      //   for progress-driven state. Ambient cloud drift + shine via sin/mod(t).
+      const t = c.t || 0;
+      const p = Math.max(0, Math.min(1, c.progress01));
+
+      // ---------- Frame geometry (viewBox 0 0 800 500) ----------
+      const FX = 110, FY = 70, FW = 580, FH = 360;   // picture frame rect
+      const COLS = 4, ROWS = 3, N = COLS * ROWS;      // 12 cells
+      const cellW = FW / COLS;                        // 145
+      const cellH = FH / ROWS;                        // 120
+
+      // ---------- C4 discrete-count mapping ----------
+      const n = p * N;
+      const doneCount = Math.floor(n);
+      const activeFrac = n - doneCount;
+
+      const clipId = 'jigFrameClip';
+      const shineClipId = 'jigShineClip';
+
+      // ---------- The underlying PICTURE (clipped to the frame) ----------
+      // Sky gradient (light blue -> cream near horizon).
+      let pic = '';
+      pic += `<rect x="${FX}" y="${FY}" width="${FW}" height="${FH}" fill="url(#jigSky)"/>`;
+
+      // Sun rising near the horizon, with soft glow + gentle rays.
+      const sunCx = FX + FW * 0.66;
+      const sunCy = FY + FH * 0.46;
+      const sunR = 46;
+      const rayPulse = (0.5 + 0.5 * Math.sin(t * 0.9)).toFixed(2);
+      let rays = '';
+      for (let i = 0; i < 12; i++) {
+        const ang = (i / 12) * Math.PI * 2 + t * 0.12;
+        const r1 = sunR + 14, r2 = sunR + 34;
+        const x1 = (sunCx + Math.cos(ang) * r1).toFixed(1);
+        const y1 = (sunCy + Math.sin(ang) * r1).toFixed(1);
+        const x2 = (sunCx + Math.cos(ang) * r2).toFixed(1);
+        const y2 = (sunCy + Math.sin(ang) * r2).toFixed(1);
+        rays += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#fde047" stroke-width="6" stroke-linecap="round" opacity="${(0.35 + 0.3 * +rayPulse).toFixed(2)}"/>`;
+      }
+      pic += rays;
+      pic += `<circle cx="${sunCx.toFixed(1)}" cy="${sunCy.toFixed(1)}" r="${(sunR + 18).toFixed(1)}" fill="#fde047" opacity="${(0.18 + 0.1 * +rayPulse).toFixed(2)}"/>`;
+      pic += `<circle cx="${sunCx.toFixed(1)}" cy="${sunCy.toFixed(1)}" r="${sunR}" fill="#f59e0b"/>`;
+      pic += `<circle cx="${sunCx.toFixed(1)}" cy="${sunCy.toFixed(1)}" r="${(sunR - 8).toFixed(1)}" fill="#fde047"/>`;
+      pic += `<ellipse cx="${(sunCx - 12).toFixed(1)}" cy="${(sunCy - 12).toFixed(1)}" rx="16" ry="12" fill="#fef9c3" opacity="0.6"/>`;
+
+      // Rolling hills (two layers) covering the bottom of the frame.
+      const hillBase = FY + FH;       // bottom edge
+      const h1 = FY + FH * 0.66;      // far hill crest baseline
+      const h2 = FY + FH * 0.78;      // near hill crest baseline
+      pic += `<path d="M ${FX},${h1.toFixed(1)}
+        Q ${(FX + FW * 0.25).toFixed(1)},${(h1 - 46).toFixed(1)} ${(FX + FW * 0.5).toFixed(1)},${(h1 - 12).toFixed(1)}
+        Q ${(FX + FW * 0.78).toFixed(1)},${(h1 + 26).toFixed(1)} ${(FX + FW).toFixed(1)},${(h1 - 18).toFixed(1)}
+        L ${(FX + FW).toFixed(1)},${hillBase.toFixed(1)} L ${FX},${hillBase.toFixed(1)} Z"
+        fill="#22c55e"/>`;
+      pic += `<path d="M ${FX},${h2.toFixed(1)}
+        Q ${(FX + FW * 0.3).toFixed(1)},${(h2 + 30).toFixed(1)} ${(FX + FW * 0.55).toFixed(1)},${(h2 - 4).toFixed(1)}
+        Q ${(FX + FW * 0.8).toFixed(1)},${(h2 - 36).toFixed(1)} ${(FX + FW).toFixed(1)},${(h2 + 6).toFixed(1)}
+        L ${(FX + FW).toFixed(1)},${hillBase.toFixed(1)} L ${FX},${hillBase.toFixed(1)} Z"
+        fill="#16a34a"/>`;
+
+      // Drifting cloud (ambient via sin(t)).
+      const cloudDrift = Math.sin(t * 0.18);
+      const ccx = FX + FW * 0.30 + cloudDrift * 34;
+      const ccy = FY + FH * 0.22;
+      pic += `<g fill="#ffffff" opacity="0.92">
+        <ellipse cx="${ccx.toFixed(1)}" cy="${ccy.toFixed(1)}" rx="42" ry="24"/>
+        <ellipse cx="${(ccx - 34).toFixed(1)}" cy="${(ccy + 8).toFixed(1)}" rx="30" ry="20"/>
+        <ellipse cx="${(ccx + 34).toFixed(1)}" cy="${(ccy + 10).toFixed(1)}" rx="32" ry="20"/>
+        <ellipse cx="${(ccx + 6).toFixed(1)}" cy="${(ccy + 14).toFixed(1)}" rx="44" ry="18"/>
+      </g>`;
+
+      // ---------- Empty-slot overlays per cell (C4) ----------
+      // Cell index = row*COLS + col. Reading order: left->right, top->bottom.
+      let overlays = '';
+      for (let i = 0; i < N; i++) {
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        const cx = FX + col * cellW;
+        const cy = FY + row * cellH;
+
+        if (i < doneCount) continue;   // revealed — show picture, no overlay
+
+        let op = 1;
+        let dy = 0;
+        if (i === doneCount) {
+          // Active cell fades out + eases a small drop offset to 0.
+          op = 1 - activeFrac;
+          const ease = 1 - (1 - activeFrac) * (1 - activeFrac); // ease-out
+          dy = -18 * (1 - ease);
+        }
+        if (op <= 0.001) continue;
+
+        // The active piece "drops in": its decoration eases down from a small
+        // offset, but the solid backing rect always covers the full cell (and
+        // the gap above) so no picture leaks through while it fades.
+        const iy = (cy + dy).toFixed(1);                 // decoration top
+        const rectH = (cellH - dy).toFixed(1);           // extend up to cover dy gap
+        // Opaque muted cream slot with inset border + faint notch.
+        overlays += `<g opacity="${op.toFixed(3)}">
+          <rect x="${cx.toFixed(1)}" y="${iy}" width="${cellW.toFixed(1)}" height="${rectH}" fill="#cbb89d"/>
+          <rect x="${(cx + 5).toFixed(1)}" y="${(+iy + 5).toFixed(1)}" width="${(cellW - 10).toFixed(1)}" height="${(cellH - 10).toFixed(1)}" fill="none" stroke="#a8916f" stroke-width="2" opacity="0.7" rx="6"/>
+          <circle cx="${(cx + cellW / 2).toFixed(1)}" cy="${(+iy + cellH / 2).toFixed(1)}" r="13" fill="none" stroke="#b8a283" stroke-width="2.5" opacity="0.7"/>
+        </g>`;
+      }
+
+      // ---------- Jigsaw grid lines over the whole frame ----------
+      let grid = '';
+      for (let cc = 1; cc < COLS; cc++) {
+        const gx = (FX + cc * cellW).toFixed(1);
+        grid += `<line x1="${gx}" y1="${FY}" x2="${gx}" y2="${(FY + FH).toFixed(1)}" stroke="#ffffff" stroke-width="2" opacity="0.45"/>`;
+        grid += `<line x1="${gx}" y1="${FY}" x2="${gx}" y2="${(FY + FH).toFixed(1)}" stroke="#7c5e3b" stroke-width="1" opacity="0.3" stroke-dasharray="6 6"/>`;
+      }
+      for (let rr = 1; rr < ROWS; rr++) {
+        const gy = (FY + rr * cellH).toFixed(1);
+        grid += `<line x1="${FX}" y1="${gy}" x2="${(FX + FW).toFixed(1)}" y2="${gy}" stroke="#ffffff" stroke-width="2" opacity="0.45"/>`;
+        grid += `<line x1="${FX}" y1="${gy}" x2="${(FX + FW).toFixed(1)}" y2="${gy}" stroke="#7c5e3b" stroke-width="1" opacity="0.3" stroke-dasharray="6 6"/>`;
+      }
+
+      // ---------- End shine sweep (only when complete) ----------
+      let shine = '';
+      if (p >= 1) {
+        // A translucent diagonal white band sweeps left->right and repeats.
+        const band = 130;
+        const span = FW + band * 2;
+        const sweep = ((t * 150) % span) - band;   // x of band leading edge
+        const bx = FX + sweep;
+        shine = `<g clip-path="url(#${shineClipId})">
+          <polygon points="${bx.toFixed(1)},${FY} ${(bx + band).toFixed(1)},${FY} ${(bx + band - 90).toFixed(1)},${(FY + FH).toFixed(1)} ${(bx - 90).toFixed(1)},${(FY + FH).toFixed(1)}"
+            fill="url(#jigShine)"/>
+        </g>`;
+      }
+
+      // ---------- Wooden puzzle frame border + soft shadow ----------
+      const frameBorder = `
+        <rect x="${(FX - 5).toFixed(1)}" y="${(FY - 5).toFixed(1)}" width="${(FW + 10).toFixed(1)}" height="${(FH + 10).toFixed(1)}" rx="14" fill="none" stroke="#7c5e3b" stroke-width="3" opacity="0.55"/>`;
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="jigsaw-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="jigSky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#bae6fd"/>
+            <stop offset="62%" stop-color="#e0f2fe"/>
+            <stop offset="100%" stop-color="#fef3c7"/>
+          </linearGradient>
+          <linearGradient id="jigShine" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+            <stop offset="50%" stop-color="#ffffff" stop-opacity="0.55"/>
+            <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+          </linearGradient>
+          <clipPath id="${clipId}"><rect x="${FX}" y="${FY}" width="${FW}" height="${FH}" rx="6"/></clipPath>
+          <clipPath id="${shineClipId}"><rect x="${FX}" y="${FY}" width="${FW}" height="${FH}" rx="6"/></clipPath>
+        </defs>
+        <!-- soft frame backing shadow -->
+        <rect x="${(FX - 2).toFixed(1)}" y="${(FY + 4).toFixed(1)}" width="${FW}" height="${FH}" rx="8" fill="#000000" opacity="0.08"/>
+        <!-- picture, overlays, grid, shine all clipped to the frame -->
+        <g clip-path="url(#${clipId})">
+          ${pic}
+          ${overlays}
+          ${grid}
+          ${shine}
+        </g>
+        ${frameBorder}
       </svg>
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
