@@ -1119,6 +1119,11 @@
       border-radius: 12px; background: #dcfce7;
     }
 
+    .boardrace-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: #faf5ff;
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1545,6 +1550,7 @@
       { id: 'blockstacker', label: 'Block Stacker', icon: '🟦', desc: 'Blocks stack to the top',     tint: '#e0e7ff', category: 'games', render: (c) => renderBlockStacker(c) },
       { id: 'pelletmuncher', label: 'Pellet Muncher', icon: '🟡', desc: 'Muncher clears the maze',   tint: '#fef9c3', category: 'games', render: (c) => renderPelletMuncher(c) },
       { id: 'snake',     label: 'Snake',             icon: '🐍', desc: 'Snake fills the board',      tint: '#dcfce7', category: 'games', render: (c) => renderSnake(c) },
+      { id: 'boardrace', label: 'Board Race',        icon: '🎲', desc: 'Race to the finish flag',    tint: '#fae8ff', category: 'games', render: (c) => renderBoardRace(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -6219,6 +6225,205 @@
         ${headSvg}
         <!-- board-filled shimmer -->
         ${glowSvg}
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
+    }
+
+    function renderBoardRace(c) {
+      // Playful "Board Race": a winding board-game track of colored square
+      // tiles runs from a green START to a checkered FINISH flag. A coral
+      // pawn hops tile-to-tile; its position along the track == progress.
+      //   N tiles laid in a serpentine path. n = progress*(N-1); the pawn sits
+      //   on Math.floor(n) and hops toward the next tile by the fractional part,
+      //   arcing up via -sin(hopFrac*PI). Pure function of c.progress01 and c.t
+      //   — no Math.random, no CSS/SMIL for progress-driven state. Ambient
+      //   motion (flag wave, die wobble) comes from sin(c.t*…).
+      const t = c.t || 0;
+      const p = Math.max(0, Math.min(1, c.progress01));
+
+      // ---------- Track geometry (viewBox 0 0 800 500) ----------
+      const N = 14;                       // TILE_COUNT
+      const COLS = 5;                     // tiles per snaked row
+      const TILE = 86;                    // tile edge length
+      const ROW_GAP = 116;                // vertical center-to-center spacing
+      const colStep = 150;                // horizontal center-to-center spacing
+      const x0 = 90, y0 = 96;             // center of tile 0
+
+      // Serpentine tile centers: rows snake left→right, then right→left, etc.
+      const tiles = [];
+      for (let i = 0; i < N; i++) {
+        const row = Math.floor(i / COLS);
+        let col = i % COLS;
+        if (row % 2 === 1) col = (COLS - 1) - col;   // reverse on odd rows
+        tiles.push({
+          x: x0 + col * colStep,
+          y: y0 + row * ROW_GAP,
+          idx: i,
+        });
+      }
+
+      const palette = ['#dc2626', '#f59e0b', '#fde047', '#22c55e', '#14b8a6'];
+
+      // ---------- Connector path between consecutive tile centers ----------
+      let connectorSvg = '<path d="M ';
+      connectorSvg += tiles.map(tl => `${tl.x.toFixed(1)},${tl.y.toFixed(1)}`).join(' L ');
+      connectorSvg += '" fill="none" stroke="#e9d5ff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>';
+      connectorSvg += '<path d="M ' + tiles.map(tl => `${tl.x.toFixed(1)},${tl.y.toFixed(1)}`).join(' L ')
+        + '" fill="none" stroke="#d8b4fe" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 16" opacity="0.8"/>';
+
+      // ---------- Tiles ----------
+      const half = TILE / 2;
+      let tilesSvg = '';
+      for (let i = 0; i < N; i++) {
+        const tl = tiles[i];
+        const tx = (tl.x - half).toFixed(1);
+        const ty = (tl.y - half).toFixed(1);
+        const isStart = (i === 0);
+        const isFinish = (i === N - 1);
+        // Gentle drop shadow under each tile.
+        tilesSvg += `<rect x="${(tl.x - half + 3).toFixed(1)}" y="${(tl.y - half + 5).toFixed(1)}" width="${TILE}" height="${TILE}" rx="14" fill="#000000" opacity="0.08"/>`;
+
+        if (isStart) {
+          // START tile: green with a label.
+          tilesSvg += `<rect x="${tx}" y="${ty}" width="${TILE}" height="${TILE}" rx="14" fill="#22c55e" stroke="#15803d" stroke-width="3"/>`;
+          tilesSvg += `<rect x="${(tl.x - half + 6).toFixed(1)}" y="${(tl.y - half + 6).toFixed(1)}" width="${(TILE - 12).toFixed(1)}" height="${((TILE - 12) * 0.4).toFixed(1)}" rx="8" fill="#ffffff" opacity="0.25"/>`;
+          tilesSvg += `<text x="${tl.x.toFixed(1)}" y="${(tl.y + 7).toFixed(1)}" text-anchor="middle" font-family="'Baloo 2','Segoe UI',sans-serif" font-weight="800" font-size="22" fill="#ffffff">START</text>`;
+        } else if (isFinish) {
+          // FINISH tile: checkered base.
+          tilesSvg += `<rect x="${tx}" y="${ty}" width="${TILE}" height="${TILE}" rx="14" fill="#ffffff" stroke="#334155" stroke-width="3"/>`;
+          const cells = 4, cs = (TILE - 6) / cells;
+          let checks = '';
+          for (let r = 0; r < cells; r++) {
+            for (let cc = 0; cc < cells; cc++) {
+              if ((r + cc) % 2 === 0) continue;
+              checks += `<rect x="${(tl.x - half + 3 + cc * cs).toFixed(1)}" y="${(tl.y - half + 3 + r * cs).toFixed(1)}" width="${cs.toFixed(1)}" height="${cs.toFixed(1)}" fill="#1e293b"/>`;
+            }
+          }
+          // Clip checks to the rounded tile via an overlay border.
+          tilesSvg += `<g>${checks}</g>`;
+          tilesSvg += `<rect x="${tx}" y="${ty}" width="${TILE}" height="${TILE}" rx="14" fill="none" stroke="#334155" stroke-width="3"/>`;
+        } else {
+          const fill = palette[i % palette.length];
+          tilesSvg += `<rect x="${tx}" y="${ty}" width="${TILE}" height="${TILE}" rx="14" fill="${fill}" stroke="#00000022" stroke-width="3"/>`;
+          // Glossy highlight strip.
+          tilesSvg += `<rect x="${(tl.x - half + 6).toFixed(1)}" y="${(tl.y - half + 6).toFixed(1)}" width="${(TILE - 12).toFixed(1)}" height="${((TILE - 12) * 0.34).toFixed(1)}" rx="8" fill="#ffffff" opacity="0.22"/>`;
+          // Pip number to give the board-game feel.
+          tilesSvg += `<text x="${tl.x.toFixed(1)}" y="${(tl.y + 9).toFixed(1)}" text-anchor="middle" font-family="'Baloo 2','Segoe UI',sans-serif" font-weight="800" font-size="26" fill="#ffffff" opacity="0.85">${i}</text>`;
+        }
+      }
+
+      // ---------- FINISH flag (waving via sin(t)) on the last tile ----------
+      const fin = tiles[N - 1];
+      const poleX = fin.x;                         // pole rises from finish tile center
+      const poleTopY = fin.y - half - 78;          // top of pole
+      const poleBotY = fin.y - half + 4;           // base just above tile
+      const wave = Math.sin(t * 3.2);              // ambient flag wave
+      const flagW = 64, flagH = 42;
+      // Two triangle-ish wavy halves: build a checkered flag with a curling edge.
+      const fy = poleTopY + 4;
+      const curl = (6 + 5 * wave).toFixed(1);      // how far the free edge curls
+      const midDip = (8 + 4 * Math.sin(t * 3.2 + 1)).toFixed(1);
+      const flagPath =
+        `M ${poleX.toFixed(1)},${fy.toFixed(1)} ` +
+        `Q ${(poleX + flagW * 0.55).toFixed(1)},${(fy - 8 + +curl).toFixed(1)} ${(poleX + flagW).toFixed(1)},${(fy + 4 + +curl * 0.5).toFixed(1)} ` +
+        `L ${(poleX + flagW).toFixed(1)},${(fy + flagH).toFixed(1)} ` +
+        `Q ${(poleX + flagW * 0.55).toFixed(1)},${(fy + flagH - 8 + +midDip).toFixed(1)} ${poleX.toFixed(1)},${(fy + flagH).toFixed(1)} Z`;
+      // Checkered fill on the flag using a clipPath.
+      const clipId = 'brFlagClip';
+      let flagChecks = '';
+      const fc = 4, fcs = flagW / fc, frs = flagH / fc;
+      for (let r = 0; r < fc; r++) {
+        for (let cc = 0; cc < fc; cc++) {
+          const dark = (r + cc) % 2 === 0;
+          flagChecks += `<rect x="${(poleX + cc * fcs).toFixed(1)}" y="${(fy + r * frs).toFixed(1)}" width="${fcs.toFixed(1)}" height="${frs.toFixed(1)}" fill="${dark ? '#1e293b' : '#ffffff'}"/>`;
+        }
+      }
+      const flagSvg = `
+        <g>
+          <rect x="${(poleX - 4).toFixed(1)}" y="${poleTopY.toFixed(1)}" width="8" height="${(poleBotY - poleTopY).toFixed(1)}" rx="4" fill="#78716c"/>
+          <circle cx="${poleX.toFixed(1)}" cy="${poleTopY.toFixed(1)}" r="7" fill="#fbbf24" stroke="#d97706" stroke-width="2"/>
+          <clipPath id="${clipId}"><path d="${flagPath}"/></clipPath>
+          <g clip-path="url(#${clipId})">${flagChecks}</g>
+          <path d="${flagPath}" fill="none" stroke="#334155" stroke-width="2"/>
+        </g>`;
+
+      // ---------- Die in the corner (decorative, wobbles via sin(t)) ----------
+      const dieS = 70, dieX = 690, dieY = 410;
+      const dieRot = (4 * Math.sin(t * 1.3)).toFixed(2);
+      const pip = (px, py) => `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="6.5" fill="#1e293b"/>`;
+      // Show "5" face; pip layout is fixed (decorative).
+      const o = dieS * 0.26;
+      const dieSvg = `
+        <g transform="translate(${dieX}, ${dieY}) rotate(${dieRot})">
+          <rect x="${(-dieS / 2 + 3).toFixed(1)}" y="${(-dieS / 2 + 6).toFixed(1)}" width="${dieS}" height="${dieS}" rx="14" fill="#000000" opacity="0.12"/>
+          <rect x="${(-dieS / 2).toFixed(1)}" y="${(-dieS / 2).toFixed(1)}" width="${dieS}" height="${dieS}" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="2.5"/>
+          <rect x="${(-dieS / 2 + 6).toFixed(1)}" y="${(-dieS / 2 + 6).toFixed(1)}" width="${(dieS - 12).toFixed(1)}" height="${((dieS - 12) * 0.34).toFixed(1)}" rx="8" fill="#f8fafc"/>
+          ${pip(-o, -o)}${pip(o, -o)}${pip(0, 0)}${pip(-o, o)}${pip(o, o)}
+        </g>`;
+
+      // ---------- Pawn position (hop between tiles) ----------
+      const n = p * (N - 1);
+      const atEnd = p >= 1;
+      // At the end the pawn sits squarely on the FINISH tile (N-1). Otherwise
+      // it rests on fromTile and hops toward fromTile+1 by hopFrac.
+      const fromTile = atEnd ? (N - 1) : Math.min(N - 2, Math.floor(n));
+      const hopFrac = atEnd ? 0 : (n - fromTile);
+      const a = tiles[fromTile];
+      const b = tiles[Math.min(N - 1, fromTile + 1)];
+      const hopHeight = 56;
+      const px0 = a.x + (b.x - a.x) * hopFrac;
+      const py0 = a.y + (b.y - a.y) * hopFrac;
+      const arc = -Math.sin(hopFrac * Math.PI) * hopHeight;
+      const pawnX = px0;
+      const pawnY = py0 + arc;
+      // Squash slightly at the top of the arc for bounce feel.
+      const squash = atEnd ? (1 + 0.02 * Math.sin(t * 4)) : (1 + 0.10 * Math.sin(hopFrac * Math.PI));
+      // Shadow on the ground tile shrinks as the pawn rises.
+      const shadowScale = 1 - 0.55 * Math.sin(hopFrac * Math.PI);
+      const shadowSvg = `<ellipse cx="${px0.toFixed(1)}" cy="${(py0 + 22).toFixed(1)}" rx="${(26 * shadowScale).toFixed(1)}" ry="${(8 * shadowScale).toFixed(1)}" fill="#000000" opacity="${(0.18 * (0.5 + 0.5 * shadowScale)).toFixed(2)}"/>`;
+
+      // Classic rounded pawn: flared base + neck + sphere head, coral.
+      const baseY = 26, neckY = 4, headY = -22, headR = 17;
+      const pawnSvg = `
+        <g transform="translate(${pawnX.toFixed(1)}, ${pawnY.toFixed(1)}) scale(${squash.toFixed(3)})">
+          <path d="M -26,${baseY} Q -26,${(baseY - 8)} -16,${(baseY - 10)}
+                   L -8,${(baseY - 18)} Q -16,${(baseY - 20)} -11,${(neckY + 6)}
+                   Q -16,${neckY} -9,${(neckY - 4)} L 9,${(neckY - 4)}
+                   Q 16,${neckY} 11,${(neckY + 6)} Q 16,${(baseY - 20)} 8,${(baseY - 18)}
+                   L 16,${(baseY - 10)} Q 26,${(baseY - 8)} 26,${baseY} Z"
+                fill="#dc2626" stroke="#991b1b" stroke-width="2.5" stroke-linejoin="round"/>
+          <ellipse cx="0" cy="${baseY}" rx="26" ry="7" fill="#b91c1c" stroke="#991b1b" stroke-width="2.5"/>
+          <circle cx="0" cy="${headY}" r="${headR}" fill="#ef4444" stroke="#991b1b" stroke-width="2.5"/>
+          <ellipse cx="-5" cy="${(headY - 5)}" rx="6" ry="4.5" fill="#ffffff" opacity="0.55"/>
+        </g>`;
+
+      // ---------- Winner shimmer when the pawn reaches FINISH ----------
+      let winSvg = '';
+      if (atEnd) {
+        const shimmer = (0.4 + 0.45 * Math.abs(Math.sin(t * 2.2))).toFixed(2);
+        winSvg = `<rect x="${(fin.x - half - 6).toFixed(1)}" y="${(fin.y - half - 6).toFixed(1)}" width="${(TILE + 12).toFixed(1)}" height="${(TILE + 12).toFixed(1)}" rx="18" fill="none" stroke="#fbbf24" stroke-width="5" opacity="${shimmer}"/>`;
+      }
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="boardrace-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <!-- track connector -->
+        ${connectorSvg}
+        <!-- tiles (START … FINISH) -->
+        ${tilesSvg}
+        <!-- winner shimmer -->
+        ${winSvg}
+        <!-- finish flag -->
+        ${flagSvg}
+        <!-- die in corner -->
+        ${dieSvg}
+        <!-- pawn shadow + pawn -->
+        ${shadowSvg}
+        ${pawnSvg}
       </svg>
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
