@@ -1109,6 +1109,11 @@
       border-radius: 12px; background: #fef3c7;
     }
 
+    .pelletmuncher-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: #1e293b;
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1533,6 +1538,7 @@
       { id: 'metamorphosis', label: 'Metamorphosis', icon: '🦋', desc: 'Caterpillar becomes a butterfly', tint: '#dcfce7', category: 'nature', render: (c) => renderMetamorphosis(c) },
       { id: 'firefly',   label: 'Firefly Jar',       icon: '✨', desc: 'Fireflies fill the jar',     tint: '#ddd6fe', category: 'nature', render: (c) => renderFireflyJar(c) },
       { id: 'blockstacker', label: 'Block Stacker', icon: '🟦', desc: 'Blocks stack to the top',     tint: '#e0e7ff', category: 'games', render: (c) => renderBlockStacker(c) },
+      { id: 'pelletmuncher', label: 'Pellet Muncher', icon: '🟡', desc: 'Muncher clears the maze',   tint: '#fef9c3', category: 'games', render: (c) => renderPelletMuncher(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -5931,6 +5937,144 @@
         ${blocksSvg}
         <!-- End glow -->
         ${glowSvg}
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
+    }
+
+    function renderPelletMuncher(c) {
+      // Arcade "Pellet Muncher": a round muncher travels a serpentine maze path,
+      // eating pellets behind it. Position = the point at arc-fraction
+      // c.progress01 along the polyline. Pellets ahead remain (= time left),
+      // pellets behind are gone. A coral cherry sits at the path's end.
+      // Pure function of c.progress01 and c.t — no Math.random, no CSS/SMIL.
+      const t = c.t || 0;
+      const p = Math.max(0, Math.min(1, c.progress01));
+
+      // ---------- Serpentine path (viewBox 0 0 800 500) ----------
+      // Build ordered waypoints: 4 rows, alternating L→R / R→L, connected by
+      // short vertical drops. Padding keeps the muncher fully inside the field.
+      const left = 90, right = 710;
+      const rows = [110, 230, 350, 450];
+      const pts = [];
+      rows.forEach((y, r) => {
+        if (r % 2 === 0) { pts.push({ x: left, y }); pts.push({ x: right, y }); }
+        else { pts.push({ x: right, y }); pts.push({ x: left, y }); }
+      });
+
+      // ---------- Cumulative segment lengths ----------
+      const seg = [];
+      let total = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const dx = pts[i + 1].x - pts[i].x, dy = pts[i + 1].y - pts[i].y;
+        const len = Math.hypot(dx, dy);
+        seg.push({ len, acc: total });
+        total += len;
+      }
+
+      // pointAtFraction(f): {x, y, angle(deg)} at arc-fraction f along the polyline.
+      const pointAtFraction = (f) => {
+        const d = Math.max(0, Math.min(1, f)) * total;
+        for (let i = 0; i < seg.length; i++) {
+          if (d <= seg[i].acc + seg[i].len || i === seg.length - 1) {
+            const local = seg[i].len > 0 ? (d - seg[i].acc) / seg[i].len : 0;
+            const a = pts[i], b = pts[i + 1];
+            const x = a.x + (b.x - a.x) * local;
+            const y = a.y + (b.y - a.y) * local;
+            const angle = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+            return { x, y, angle };
+          }
+        }
+        return { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y, angle: 0 };
+      };
+
+      // ---------- Maze walls: a faint indigo outline tracing the path ----------
+      const wallPath = 'M ' + pts.map(pt => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' L ');
+      const wallsSvg = `
+        <path d="${wallPath}" fill="none" stroke="#3730a3" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+        <path d="${wallPath}" fill="none" stroke="#4f46e5" stroke-width="34" stroke-linecap="round" stroke-linejoin="round" opacity="0.18" stroke-dasharray="2 30"/>`;
+
+      // ---------- Pellets: N samples at even arc-fractions, render only ahead ----------
+      // Sample interior fractions (avoid 0 and the very end where the cherry sits).
+      const N = 26;
+      let pelletsSvg = '';
+      for (let k = 1; k < N; k++) {
+        const f = k / N;
+        if (f < p) continue;            // eaten — behind the muncher
+        if (f > 0.965) continue;        // leave space for the cherry at the end
+        const q = pointAtFraction(f);
+        // Gentle ambient twinkle, deterministic from t and index.
+        const tw = 0.78 + 0.22 * Math.sin(t * 3 + k * 0.9);
+        pelletsSvg += `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="6.5" fill="#fde047" opacity="${tw.toFixed(2)}"/>`;
+      }
+
+      // ---------- Cherry (prize) at the end of the path ----------
+      const end = pointAtFraction(1);
+      const ex = end.x, ey = end.y;
+      const arrived = p >= 1;
+      // Subtle ambient bob for the cherries before arrival.
+      const bob = arrived ? 0 : Math.sin(t * 2) * 1.5;
+      const cySvg = `
+        <g transform="translate(${ex.toFixed(1)}, ${(ey + bob).toFixed(1)})">
+          <path d="M -2,-8 Q 8,-20 16,-22" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round"/>
+          <path d="M 6,-8 Q 12,-18 16,-22" fill="none" stroke="#15803d" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="-2" cy="2" r="10" fill="#dc2626"/>
+          <circle cx="9" cy="3" r="9" fill="#dc2626"/>
+          <circle cx="-5" cy="-1" r="3" fill="#fca5a5" opacity="0.8"/>
+          <circle cx="6" cy="0" r="2.5" fill="#fca5a5" opacity="0.8"/>
+        </g>`;
+
+      // ---------- Muncher ----------
+      const m = pointAtFraction(p);
+      // Mouth opens/closes via sin(t). Half-angle of the wedge in degrees.
+      const chomp = Math.abs(Math.sin(t * 6));       // 0 (closed) .. 1 (open)
+      const half = (5 + 38 * chomp).toFixed(1);      // 5°..43° half-mouth
+      const R = 30;
+      // Mouth wedge points (in muncher local frame, before rotation). The wedge
+      // opens toward +x (direction of travel) — the whole group is rotated by angle.
+      const rad = half * Math.PI / 180;
+      const mx1 = (R * Math.cos(rad)).toFixed(1), my1 = (R * Math.sin(rad)).toFixed(1);
+      const mx2 = (R * Math.cos(rad)).toFixed(1), my2 = (-R * Math.sin(rad)).toFixed(1);
+      // Eye sits up and slightly back from the mouth.
+      const muncherSvg = `
+        <g transform="translate(${m.x.toFixed(1)}, ${m.y.toFixed(1)}) rotate(${m.angle.toFixed(1)})">
+          <circle cx="0" cy="0" r="${R}" fill="#fbbf24"/>
+          <circle cx="0" cy="0" r="${R}" fill="none" stroke="#d97706" stroke-width="2.5" opacity="0.55"/>
+          <!-- mouth wedge cut out of the body, opening toward travel direction -->
+          <path d="M 0,0 L ${mx1},${my1} A ${R},${R} 0 0 0 ${mx2},${my2} Z" fill="#1e293b"/>
+          <!-- eye (rotated up relative to body so it reads regardless of travel angle) -->
+          <circle cx="-4" cy="-15" r="4.5" fill="#1e293b"/>
+          <circle cx="-2.5" cy="-16.5" r="1.6" fill="#fff"/>
+        </g>`;
+
+      // ---------- Arrival glow at the cherry ----------
+      let glowSvg = '';
+      if (arrived) {
+        const shimmer = 0.5 + 0.5 * Math.abs(Math.sin(t * 1.8));
+        const ringOp = (0.4 + 0.45 * shimmer).toFixed(2);
+        glowSvg = `
+          <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="42" fill="none" stroke="#fde047" stroke-width="4" opacity="${ringOp}"/>
+          <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="52" fill="none" stroke="#fde047" stroke-width="2.5" opacity="${(ringOp * 0.5).toFixed(2)}"/>`;
+      }
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="pelletmuncher-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <!-- maze field -->
+        <rect x="0" y="0" width="800" height="500" fill="#1e293b"/>
+        <!-- serpentine maze walls -->
+        ${wallsSvg}
+        <!-- remaining pellets (ahead of the muncher) -->
+        ${pelletsSvg}
+        <!-- cherry prize at the end -->
+        ${cySvg}
+        <!-- arrival glow -->
+        ${glowSvg}
+        <!-- the muncher -->
+        ${muncherSvg}
       </svg>
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
