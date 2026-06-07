@@ -1114,6 +1114,11 @@
       border-radius: 12px; background: #1e293b;
     }
 
+    .snake-scene {
+      position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
+      border-radius: 12px; background: #dcfce7;
+    }
+
     /* === TRAIN V2 (inline SVG) === */
     .train-scene {
       position: relative; width: 100%; flex: 1; min-height: 0; overflow: hidden;
@@ -1539,6 +1544,7 @@
       { id: 'firefly',   label: 'Firefly Jar',       icon: '✨', desc: 'Fireflies fill the jar',     tint: '#ddd6fe', category: 'nature', render: (c) => renderFireflyJar(c) },
       { id: 'blockstacker', label: 'Block Stacker', icon: '🟦', desc: 'Blocks stack to the top',     tint: '#e0e7ff', category: 'games', render: (c) => renderBlockStacker(c) },
       { id: 'pelletmuncher', label: 'Pellet Muncher', icon: '🟡', desc: 'Muncher clears the maze',   tint: '#fef9c3', category: 'games', render: (c) => renderPelletMuncher(c) },
+      { id: 'snake',     label: 'Snake',             icon: '🐍', desc: 'Snake fills the board',      tint: '#dcfce7', category: 'games', render: (c) => renderSnake(c) },
     ];
     const VIEW_MODE_BY_ID = Object.fromEntries(VIEW_MODE_META.map(v => [v.id, v]));
 
@@ -6075,6 +6081,144 @@
         ${glowSvg}
         <!-- the muncher -->
         ${muncherSvg}
+      </svg>
+    </div>
+    <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
+  </div>`;
+    }
+
+    function renderSnake(c) {
+      // Playful "Snake": a green snake grows to fill a checkerboard grid.
+      // Cells are visited in boustrophedon (serpentine) order so consecutive
+      // cells are always orthogonally adjacent. coverage = progress:
+      //   segments = round(progress * TOTAL_CELLS). The body occupies the first
+      //   `segments` cells; the head is the last occupied cell. Apples sit on
+      //   upcoming cells just ahead of the head. Pure function of
+      //   c.progress01 and c.t — no Math.random, no CSS/SMIL for state.
+      const t = c.t || 0;
+      const p = Math.max(0, Math.min(1, c.progress01));
+
+      // ---------- Grid geometry (viewBox 0 0 800 500) ----------
+      const COLS = 10, ROWS = 7;
+      const TOTAL = COLS * ROWS;
+      const PAD = 40;                               // outer margin around the board
+      const boardW = 800 - PAD * 2, boardH = 500 - PAD * 2;
+      const CW = boardW / COLS, CH = boardH / ROWS;
+      const cx = (col) => PAD + col * CW + CW / 2;   // cell center x
+      const cy = (row) => PAD + row * CH + CH / 2;   // cell center y
+
+      // ---------- Boustrophedon ordering ----------
+      // order[i] = { col, row } for the i-th cell in serpentine traversal.
+      const order = [];
+      for (let row = 0; row < ROWS; row++) {
+        if (row % 2 === 0) {
+          for (let col = 0; col < COLS; col++) order.push({ col, row });
+        } else {
+          for (let col = COLS - 1; col >= 0; col--) order.push({ col, row });
+        }
+      }
+
+      const segments = Math.max(1, Math.round(p * TOTAL));
+      const headIdx = segments - 1;
+
+      // ---------- Checkerboard ----------
+      let boardSvg = '';
+      for (let row = 0; row < ROWS; row++) {
+        for (let col = 0; col < COLS; col++) {
+          const light = (row + col) % 2 === 0;
+          const x = (PAD + col * CW).toFixed(1);
+          const y = (PAD + row * CH).toFixed(1);
+          boardSvg += `<rect x="${x}" y="${y}" width="${CW.toFixed(1)}" height="${CH.toFixed(1)}" fill="${light ? '#dcfce7' : '#bbf7d0'}"/>`;
+        }
+      }
+
+      // ---------- Apples on upcoming cells (just ahead of the head) ----------
+      // Place up to two apples on cells the snake hasn't reached yet, so it
+      // reads as heading toward them. They retreat as the snake catches up.
+      const appleOffsets = [1, 4];
+      let applesSvg = '';
+      for (let a = 0; a < appleOffsets.length; a++) {
+        const idx = headIdx + appleOffsets[a];
+        if (idx >= TOTAL) continue;                 // no room near the end
+        const cell = order[idx];
+        const ax = cx(cell.col), ay = cy(cell.row);
+        // Ambient shimmer: gentle scale pulse, deterministic from t.
+        const pulse = 1 + 0.08 * Math.sin(t * 3 + a * 1.7);
+        const r = (Math.min(CW, CH) * 0.27 * pulse);
+        applesSvg += `
+          <g transform="translate(${ax.toFixed(1)}, ${ay.toFixed(1)})">
+            <ellipse cx="0" cy="0" rx="${r.toFixed(1)}" ry="${(r * 0.92).toFixed(1)}" fill="#dc2626"/>
+            <ellipse cx="${(-r * 0.32).toFixed(1)}" cy="${(-r * 0.32).toFixed(1)}" rx="${(r * 0.28).toFixed(1)}" ry="${(r * 0.18).toFixed(1)}" fill="#f87171" opacity="0.75"/>
+            <path d="M 0,${(-r * 0.85).toFixed(1)} Q ${(r * 0.55).toFixed(1)},${(-r * 1.5).toFixed(1)} ${(r * 0.9).toFixed(1)},${(-r * 0.95).toFixed(1)} Q ${(r * 0.4).toFixed(1)},${(-r * 0.7).toFixed(1)} 0,${(-r * 0.85).toFixed(1)} Z" fill="#16a34a"/>
+            <rect x="-1.5" y="${(-r * 1.15).toFixed(1)}" width="3" height="${(r * 0.4).toFixed(1)}" rx="1.5" fill="#15803d"/>
+          </g>`;
+      }
+
+      // ---------- Snake body (first `segments` cells of the order) ----------
+      const inset = 3;                               // gap between cell edge and body
+      const bw = CW - inset * 2, bh = CH - inset * 2;
+      const radius = Math.min(bw, bh) * 0.32;
+      let bodySvg = '';
+      for (let i = 0; i < segments; i++) {
+        if (i === headIdx) continue;                 // head drawn separately
+        const cell = order[i];
+        const x = (PAD + cell.col * CW + inset).toFixed(1);
+        const y = (PAD + cell.row * CH + inset).toFixed(1);
+        // Alternate body shades for a scaly, segmented look.
+        const fill = i % 2 === 0 ? '#22c55e' : '#16a34a';
+        bodySvg += `<rect x="${x}" y="${y}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="${radius.toFixed(1)}" fill="${fill}" stroke="#15803d" stroke-width="2"/>`;
+      }
+
+      // ---------- Head (leading cell), facing direction of travel ----------
+      const head = order[headIdx];
+      const hx = cx(head.col), hy = cy(head.row);
+      // Direction = vector from previous cell to head. Default to +x (right).
+      let dx = 1, dy = 0;
+      if (headIdx > 0) {
+        const prev = order[headIdx - 1];
+        dx = head.col - prev.col;
+        dy = head.row - prev.row;
+      }
+      const headAngle = Math.atan2(dy, dx) * 180 / Math.PI;
+      const hw = bw, hh = bh;
+      const hRadius = Math.min(hw, hh) * 0.42;
+      // Eyes sit on the leading half of the head (local +x is travel direction).
+      const eyeOff = Math.min(hw, hh) * 0.18;
+      const eyeR = Math.min(hw, hh) * 0.11;
+      const pupilR = eyeR * 0.5;
+      // Subtle ambient head pulse via sin(t).
+      const headScale = (1 + 0.03 * Math.sin(t * 4)).toFixed(3);
+      const headSvg = `
+        <g transform="translate(${hx.toFixed(1)}, ${hy.toFixed(1)}) rotate(${headAngle.toFixed(1)}) scale(${headScale})">
+          <rect x="${(-hw / 2).toFixed(1)}" y="${(-hh / 2).toFixed(1)}" width="${hw.toFixed(1)}" height="${hh.toFixed(1)}" rx="${hRadius.toFixed(1)}" fill="#22c55e" stroke="#15803d" stroke-width="2.5"/>
+          <circle cx="${(hw * 0.18).toFixed(1)}" cy="${(-eyeOff).toFixed(1)}" r="${eyeR.toFixed(1)}" fill="#fff"/>
+          <circle cx="${(hw * 0.18).toFixed(1)}" cy="${eyeOff.toFixed(1)}" r="${eyeR.toFixed(1)}" fill="#fff"/>
+          <circle cx="${(hw * 0.22).toFixed(1)}" cy="${(-eyeOff).toFixed(1)}" r="${pupilR.toFixed(1)}" fill="#0f172a"/>
+          <circle cx="${(hw * 0.22).toFixed(1)}" cy="${eyeOff.toFixed(1)}" r="${pupilR.toFixed(1)}" fill="#0f172a"/>
+        </g>`;
+
+      // ---------- Filled-board celebration shimmer ----------
+      let glowSvg = '';
+      if (p >= 1) {
+        const shimmer = 0.45 + 0.4 * Math.abs(Math.sin(t * 1.8));
+        glowSvg = `<rect x="${PAD}" y="${PAD}" width="${boardW.toFixed(1)}" height="${boardH.toFixed(1)}" fill="none" stroke="#15803d" stroke-width="5" opacity="${shimmer.toFixed(2)}"/>`;
+      }
+
+      return `
+  <div class="visual-timer-container">
+    <div class="visual-timer-header"><h2 class="visual-timer-title">${c.title}</h2></div>
+    <div class="snake-scene">
+      <svg class="scene-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+        <!-- checkerboard -->
+        ${boardSvg}
+        <!-- apples ahead of the head -->
+        ${applesSvg}
+        <!-- snake body -->
+        ${bodySvg}
+        <!-- snake head -->
+        ${headSvg}
+        <!-- board-filled shimmer -->
+        ${glowSvg}
       </svg>
     </div>
     <div class="visual-countdown-overlay" id="visualCountdown">${c.countdown}</div>
